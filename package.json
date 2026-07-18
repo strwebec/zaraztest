@@ -1,0 +1,21 @@
+{
+  "name": "zaraz-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Playwright E2E test suite for the ZARAZ marketplace (frontend on :3000, backend on :4000)",
+  "scripts": {
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:mobile": "playwright test --project=mobile"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@faker-js/faker": "^9.0.0",
+    "@types/node": "^20.0.0",
+    "mongodb": "^6.9.0",
+    "bcryptjs": "^2.4.3",
+    "@types/bcryptjs": "^2.4.6",
+    "typescript": "^5.6.0"
+  }
+}

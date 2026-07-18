@@ -1,0 +1,95 @@
+const rateLimit = require('express-rate-limit');
+
+// login/register are IP-keyed (5 per 15 min, shared across every account
+// hitting this server from the same machine) — fine for real traffic, but it
+// means an E2E suite exercising multiple roles blows through the cap almost
+// immediately even though no individual user ever would. `skip` only fires
+// when the process was explicitly started with NODE_ENV=test (never how the
+// app is deployed) — every other limiter, and production/normal dev
+// behavior for these two, is unaffected.
+const skipInTest = () => process.env.NODE_ENV === 'test';
+
+const publicLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const authedLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'TOO_MANY_ATTEMPTS' },
+  skip: skipInTest,
+});
+
+// Same window/limit as login — prevents automated account-creation spam and email flooding.
+const registerLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'TOO_MANY_ATTEMPTS' },
+  skip: skipInTest,
+});
+
+// A 6-digit code has only 1M combinations — cap attempts per IP well below what
+// brute-forcing it would need, tighter than login/register's 5-per-window.
+const verifyCodeLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'TOO_MANY_ATTEMPTS' },
+  skip: skipInTest,
+});
+
+const bookingLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const reviewLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 3,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'TOO_MANY_ATTEMPTS' },
+});
+
+const catalogLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+const adminLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+module.exports = {
+  publicLimiter,
+  authedLimiter,
+  loginLimiter,
+  registerLimiter,
+  verifyCodeLimiter,
+  bookingLimiter,
+  reviewLimiter,
+  catalogLimiter,
+  adminLimiter,
+};

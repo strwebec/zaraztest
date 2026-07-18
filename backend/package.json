@@ -1,0 +1,29 @@
+{
+  "name": "zaraz-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch-path=server.js --watch-path=config --watch-path=jobs --watch-path=middleware --watch-path=models --watch-path=routes --watch-path=utils server.js",
+    "seed": "node seed/seed.js",
+    "db": "node scripts/memory-mongo.js"
+  },
+  "dependencies": {
+    "bcrypt": "^5.1.1",
+    "cloudinary": "^2.5.1",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.4.1",
+    "googleapis": "^173.0.0",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "mongodb-memory-server": "^10.1.2",
+    "mongoose": "^8.9.0",
+    "multer": "^2.0.1",
+    "node-cron": "^4.6.0",
+    "nodemailer": "^9.0.3"
+  }
+}

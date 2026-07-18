@@ -1,0 +1,12 @@
+node_modules/
+backend/.data/
+backend/uploads/
+.env
+.env.local
+.next/
+dist/
+build/
+*.log
+.DS_Store
+test-results/
+playwright-report/
