@@ -430,6 +430,16 @@ async function setBookingStatus(req, res, status, extra = {}) {
     await applyClientViolation(booking.client, 'no_show');
   }
 
+  if (status === 'completed' && booking.client) {
+    await Notification.create({
+      user: booking.client,
+      type: 'booking_completed',
+      title: 'Як пройшов візит?',
+      text: `Залиште відгук про ${req.businessDoc.name} — ${booking.service?.name ?? 'послугу'}. Це допоможе іншим клієнтам.`,
+      relatedBooking: booking._id,
+    });
+  }
+
   res.json({ booking: applyPhoneReveal(booking.toObject()) });
 }
 
@@ -506,6 +516,44 @@ router.patch(
   })
 );
 
+// Lets the business hand an auto-assigned booking (see Booking.autoAssignedStaff) to a
+// specific master — same date/time, just a real person confirmed to do it instead of
+// whoever the system happened to pick as free when the client booked. Also usable to
+// re-confirm/reassign an already-assigned booking to someone else.
+router.patch(
+  '/bookings/:id/assign-staff',
+  asyncHandler(async (req, res) => {
+    const { staffId } = req.body || {};
+    if (typeof staffId !== 'string' || !staffId) return res.status(400).json({ error: 'INVALID_INPUT' });
+
+    const booking = await Booking.findOne({ _id: req.params.id, business: req.businessId, status: 'confirmed' });
+    if (!booking) return res.status(404).json({ error: 'NOT_FOUND' });
+
+    const staff = await Staff.findOne({ _id: staffId, business: req.businessId, active: true });
+    if (!staff) return res.status(404).json({ error: 'NOT_FOUND' });
+
+    const reason = await slotUnavailableReason({
+      staff,
+      date: booking.date,
+      startTime: booking.startTime,
+      durationMinutes: booking.durationMinutes,
+      excludeBookingId: booking._id,
+    });
+    if (reason) return res.status(409).json({ error: reasonToErrorCode(reason) });
+
+    booking.staff = staff._id;
+    booking.autoAssignedStaff = false;
+    try {
+      await booking.save();
+    } catch (err) {
+      if (err.code === 11000) return res.status(409).json({ error: 'SLOT_TAKEN' });
+      throw err;
+    }
+
+    res.json({ booking: applyPhoneReveal(booking.toObject()) });
+  })
+);
+
 router.post(
   '/bookings/:id/reschedule',
   asyncHandler(async (req, res) => {
@@ -555,6 +603,9 @@ router.post(
         booking.date = date;
         booking.startTime = startTime;
         booking.staff = staff._id;
+        // The business explicitly naming a staffId here is a deliberate assignment,
+        // same as PATCH .../assign-staff — clears the auto-assigned flag.
+        if (typeof staffId === 'string' && staffId) booking.autoAssignedStaff = false;
         await booking.save({ session });
       });
     } catch (err) {
@@ -563,6 +614,16 @@ router.post(
       throw err;
     } finally {
       await session.endSession();
+    }
+
+    if (booking.client) {
+      await Notification.create({
+        user: booking.client,
+        type: 'booking_rescheduled',
+        title: 'Запис перенесено',
+        text: `${req.businessDoc.name} переніс ваш запис на ${date} о ${startTime}.`,
+        relatedBooking: booking._id,
+      });
     }
 
     res.json({ booking: applyPhoneReveal(booking.toObject()), isLate, policyHours });
@@ -705,7 +766,7 @@ router.get(
 router.post(
   '/services',
   asyncHandler(async (req, res) => {
-    const { name, description, price, durationMinutes, category, customCategoryName, staff, isFree } = req.body || {};
+    const { name, description, price, durationMinutes, category, customCategoryName, staff, isFree, combinable } = req.body || {};
     const free = isFree === true;
     if (
       typeof name !== 'string' ||
@@ -757,6 +818,7 @@ router.post(
       durationMinutes,
       category: categorySlug,
       staff: staffIds,
+      combinable: combinable !== false,
     });
     res.status(201).json({ service });
   })
@@ -765,7 +827,7 @@ router.post(
 router.patch(
   '/services/:id',
   asyncHandler(async (req, res) => {
-    const allowed = ['name', 'description', 'price', 'durationMinutes', 'category', 'staff', 'isFree'];
+    const allowed = ['name', 'description', 'price', 'durationMinutes', 'category', 'staff', 'isFree', 'combinable'];
     const update = {};
     for (const key of allowed) if (key in (req.body || {})) update[key] = req.body[key];
 

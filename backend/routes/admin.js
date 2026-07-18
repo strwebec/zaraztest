@@ -274,6 +274,52 @@ router.post(
   })
 );
 
+// Lets a super-admin activate TOP placement for a business directly, bypassing the
+// purchase/payment-confirmation flow entirely (e.g. as a goodwill gesture or a promo) —
+// creates a TopPlacement record for the history/audit trail same as a paid one, just
+// already CONFIRMED with amount 0.
+router.post(
+  '/businesses/:id/grant-top',
+  requirePermission('businesses'),
+  asyncHandler(async (req, res) => {
+    const { durationDays } = req.body || {};
+    const days = Number(durationDays);
+    if (!Number.isFinite(days) || days <= 0 || days > 365) {
+      return res.status(400).json({ error: 'INVALID_INPUT' });
+    }
+
+    const business = await Business.findById(req.params.id);
+    if (!business) return res.status(404).json({ error: 'NOT_FOUND' });
+
+    const confirmedAt = new Date();
+    const expiresAt = new Date(confirmedAt.getTime() + days * 24 * 60 * 60 * 1000);
+
+    const placement = await TopPlacement.create({
+      business: business._id,
+      package: 'admin_grant',
+      amount: 0,
+      durationDays: days,
+      status: 'CONFIRMED',
+      requestedAt: confirmedAt,
+      confirmedAt,
+      expiresAt,
+    });
+
+    business.top = { active: true, until: expiresAt };
+    await business.save();
+
+    await logAdminAction(req, {
+      action: 'business.grantTop',
+      targetType: 'Business',
+      targetId: business._id,
+      targetLabel: business.name,
+      meta: { durationDays: days, expiresAt },
+    });
+
+    res.status(201).json({ business, placement });
+  })
+);
+
 // Permanent delete — SUPER_ADMIN only. Refuses if the business still has upcoming
 // confirmed bookings, so an admin can't silently erase appointments clients are
 // still expecting; block the business first to let those play out or be cancelled.

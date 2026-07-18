@@ -13,6 +13,10 @@ const serviceSchema = new mongoose.Schema(
     category: { type: String, required: true },
     photoUrl: String,
     staff: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Staff' }],
+    // When false, this service must be booked alone — it can't be added to a
+    // multi-service checkout alongside other services. Defaults to true (today's
+    // behavior) so existing services stay combinable without any migration.
+    combinable: { type: Boolean, default: true },
     active: { type: Boolean, default: true },
   },
   { timestamps: true }

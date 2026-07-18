@@ -81,6 +81,16 @@ router.post(
 
     if (isLate) await applyClientViolation(req.userId, 'late_cancel');
 
+    if (booking.business?.owner) {
+      await Notification.create({
+        user: booking.business.owner,
+        type: 'booking_cancelled_by_client',
+        title: 'Клієнт скасував запис',
+        text: `${booking.clientName || 'Клієнт'} скасував запис на ${booking.date} о ${booking.startTime}.`,
+        relatedBooking: booking._id,
+      });
+    }
+
     res.json({ booking, isLate, policyHours });
   })
 );
@@ -168,6 +178,16 @@ router.post(
       throw err;
     } finally {
       await session.endSession();
+    }
+
+    if (booking.business?.owner) {
+      await Notification.create({
+        user: booking.business.owner,
+        type: 'booking_rescheduled',
+        title: 'Клієнт переніс запис',
+        text: `${booking.clientName || 'Клієнт'} переніс запис на ${date} о ${startTime}.`,
+        relatedBooking: booking._id,
+      });
     }
 
     res.json({ booking, isLate, policyHours });

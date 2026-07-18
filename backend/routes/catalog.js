@@ -246,14 +246,20 @@ router.get(
   asyncHandler(async (req, res) => {
     const { date } = req.query;
     const serviceIds = typeof req.query.serviceIds === 'string' ? req.query.serviceIds.split(',').filter(Boolean) : [];
-    if (!serviceIds.length || typeof date !== 'string' || !DATE_RE.test(date)) {
+    if (!serviceIds.length || serviceIds.length > 20 || typeof date !== 'string' || !DATE_RE.test(date)) {
       return res.status(400).json({ error: 'INVALID_INPUT' });
     }
 
-    const services = await Service.find({ _id: { $in: serviceIds }, business: req.params.id, active: true }).lean();
-    if (services.length !== serviceIds.length) return res.status(404).json({ error: 'NOT_FOUND' });
+    // serviceIds may repeat the same id (booking one service multiple times, e.g. a
+    // sauna for 3 hours instead of 1) — $in dedupes automatically, so validate and sum
+    // durations against the unique id set, then re-expand via the lookup map for the
+    // duration total so each repeated instance is actually counted.
+    const uniqueIds = [...new Set(serviceIds)];
+    const services = await Service.find({ _id: { $in: uniqueIds }, business: req.params.id, active: true }).lean();
+    if (services.length !== uniqueIds.length) return res.status(404).json({ error: 'NOT_FOUND' });
 
-    const totalDuration = services.reduce((sum, s) => sum + s.durationMinutes, 0);
+    const serviceById = new Map(services.map((s) => [String(s._id), s]));
+    const totalDuration = serviceIds.reduce((sum, id) => sum + serviceById.get(id).durationMinutes, 0);
 
     // A service with an empty staff list means "any active staff can do it" — only
     // intersect down for services that actually restrict who can perform them.

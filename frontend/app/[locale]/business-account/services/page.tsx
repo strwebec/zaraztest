@@ -69,6 +69,7 @@ function ServiceEditForm({
   const [description, setDescription] = useState(service.description ?? '');
   const [price, setPrice] = useState(String(service.price));
   const [isFree, setIsFree] = useState(!!service.isFree);
+  const [combinable, setCombinable] = useState(service.combinable !== false);
   const [durationMinutes, setDurationMinutes] = useState(String(service.durationMinutes));
   const [staffIds, setStaffIds] = useState<string[]>(service.staff ?? []);
   const [error, setError] = useState('');
@@ -95,6 +96,10 @@ function ServiceEditForm({
       <label className="flex items-center gap-2 text-xs font-semibold text-text-muted">
         <input type="checkbox" checked={isFree} onChange={(e) => setIsFree(e.target.checked)} />
         {t('biz.freeService')}
+      </label>
+      <label className="flex items-center gap-2 text-xs font-semibold text-text-muted">
+        <input type="checkbox" checked={combinable} onChange={(e) => setCombinable(e.target.checked)} />
+        {t('biz.combinableService')}
       </label>
       <div className="flex gap-2">
         {!isFree && (
@@ -131,6 +136,7 @@ function ServiceEditForm({
                 description,
                 price: isFree ? 0 : Number(price),
                 isFree,
+                combinable,
                 durationMinutes: Number(durationMinutes),
                 staff: staffIds,
               },
@@ -172,6 +178,7 @@ export default function BusinessServicesPage() {
   const [customCategoryName, setCustomCategoryName] = useState('');
   const [price, setPrice] = useState('');
   const [isFree, setIsFree] = useState(false);
+  const [combinable, setCombinable] = useState(true);
   const [durationMinutes, setDurationMinutes] = useState('');
   const [staffIds, setStaffIds] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -202,6 +209,7 @@ export default function BusinessServicesPage() {
         customCategoryName: category === 'other' ? customCategoryName : undefined,
         price: isFree ? 0 : Number(price),
         isFree,
+        combinable,
         durationMinutes: Number(durationMinutes),
         staff: staffIds.length ? staffIds : undefined,
       });
@@ -210,6 +218,7 @@ export default function BusinessServicesPage() {
       setCustomCategoryName('');
       setPrice('');
       setIsFree(false);
+      setCombinable(true);
       setDurationMinutes('');
       setStaffIds([]);
       setShowForm(false);
@@ -274,6 +283,10 @@ export default function BusinessServicesPage() {
           <label className="flex items-center gap-2 text-sm font-semibold text-text-muted">
             <input type="checkbox" checked={isFree} onChange={(e) => setIsFree(e.target.checked)} />
             {t('biz.freeService')}
+          </label>
+          <label className="flex items-center gap-2 text-sm font-semibold text-text-muted">
+            <input type="checkbox" checked={combinable} onChange={(e) => setCombinable(e.target.checked)} />
+            {t('biz.combinableService')}
           </label>
           <div className="flex gap-3">
             {!isFree && (

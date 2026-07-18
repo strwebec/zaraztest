@@ -22,6 +22,7 @@ export type Service = {
   description?: string;
   price: number;
   isFree?: boolean;
+  combinable?: boolean;
   durationMinutes: number;
   category: string;
   staff: string[];
@@ -45,7 +46,7 @@ export type BusinessDetail = {
   googleReviewsCount: number;
   platformRating: number;
   platformReviewsCount: number;
-  top?: { active: boolean };
+  top?: { active: boolean; until?: string };
   cancellationPolicyHours: 12 | 24 | 48;
   status?: 'PENDING' | 'ACTIVE' | 'HIDDEN' | 'BLOCKED';
   rejectionReason?: string;
@@ -435,6 +436,10 @@ export type BusinessBooking = {
   readyAt?: string;
   phoneRevealed?: boolean;
   phoneRevealAt?: string;
+  // True when the client booked without picking a specific master and the system
+  // auto-assigned whoever was free — the business can confirm/reassign via
+  // assignBusinessBookingStaff. `staff` above still points at that auto-pick.
+  autoAssignedStaff?: boolean;
 };
 
 export type BusinessStats = {
@@ -525,6 +530,10 @@ export function completeBusinessBooking(id: string) {
 
 export function updateBookingDuration(id: string, durationMinutes: number) {
   return apiPatch<{ booking: BusinessBooking }>(`/business/bookings/${id}/duration`, { durationMinutes });
+}
+
+export function assignBusinessBookingStaff(id: string, staffId: string) {
+  return apiPatch<{ booking: BusinessBooking }>(`/business/bookings/${id}/assign-staff`, { staffId });
 }
 
 export function noShowBusinessBooking(id: string) {
@@ -728,6 +737,7 @@ export function createBusinessService(payload: {
   description?: string;
   price: number;
   isFree?: boolean;
+  combinable?: boolean;
   durationMinutes: number;
   category: string;
   customCategoryName?: string;
@@ -741,6 +751,7 @@ export function updateBusinessService(id: string, payload: Partial<{
   description: string;
   price: number;
   isFree: boolean;
+  combinable: boolean;
   durationMinutes: number;
   category: string;
   staff: string[];
@@ -914,6 +925,10 @@ export function blockAdminBusiness(id: string, payload?: { reason?: string; dura
 
 export function unblockAdminBusiness(id: string) {
   return apiPost<{ business: AdminBusiness }>(`/admin/businesses/${id}/unblock`);
+}
+
+export function grantAdminBusinessTop(id: string, durationDays: number) {
+  return apiPost<{ business: AdminBusiness }>(`/admin/businesses/${id}/grant-top`, { durationDays });
 }
 
 export type AdminBusinessDetail = BusinessDetail & {

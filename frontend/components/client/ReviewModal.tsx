@@ -5,6 +5,10 @@ import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { StarRating } from '@/components/shared/StarRating';
 
+// Mirrors the backend's minimum in routes/client.js's POST /bookings/:id/review —
+// a review shorter than this is rejected with INVALID_INPUT, so this must match.
+const MIN_REVIEW_LENGTH = 20;
+
 export function ReviewModal({
   businessName,
   onSubmit,
@@ -21,6 +25,8 @@ export function ReviewModal({
   const { t } = useTranslation();
   const [rating, setRating] = useState(5);
   const [text, setText] = useState('');
+  const trimmedLength = text.trim().length;
+  const tooShort = trimmedLength > 0 && trimmedLength < MIN_REVIEW_LENGTH;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center" onClick={onClose}>
@@ -46,11 +52,14 @@ export function ReviewModal({
           rows={4}
           className="resize-none rounded-xl border border-border bg-bg px-4 py-3 text-sm text-text outline-none focus:border-primary"
         />
+        <p className={`text-xs ${tooShort ? 'text-danger' : 'text-text-muted'}`}>
+          {t('client.reviewMinLength', { count: MIN_REVIEW_LENGTH, current: trimmedLength })}
+        </p>
 
         {error && <p className="text-sm text-danger">{error}</p>}
 
         <button
-          disabled={isPending || !text.trim()}
+          disabled={isPending || trimmedLength < MIN_REVIEW_LENGTH}
           onClick={() => onSubmit(rating, text.trim())}
           className="rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white transition disabled:opacity-50"
         >

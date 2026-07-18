@@ -36,32 +36,72 @@ export default function BusinessProfilePage() {
   const removeFavorite = useRemoveFavorite();
   const isFavorite = !!favoritesData?.businesses.some((b) => b.id === id);
 
-  const [selectedServiceIds, setSelectedServiceIds] = useState<string[]>([]);
+  // serviceId -> quantity (only entries with qty > 0 count as selected). A quantity
+  // above 1 books the same service multiple times in a row (e.g. a sauna for 3 hours
+  // instead of 1) in a single flow, instead of making the client repeat the whole
+  // booking process three times.
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [selectedDate, setSelectedDate] = useState(() => toDateKey(new Date()));
   const [selectedSlot, setSelectedSlot] = useState<{ time: string; staffId: string } | null>(null);
   const [comment, setComment] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  const MAX_QUANTITY = 10;
+
   const services = data?.services ?? [];
   const staff = data?.staff ?? [];
 
   useEffect(() => {
-    if (!selectedServiceIds.length && services.length) setSelectedServiceIds([services[0]._id]);
+    if (!Object.keys(quantities).length && services.length) setQuantities({ [services[0]._id]: 1 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [services]);
 
   function toggleService(serviceId: string) {
-    setSelectedServiceIds((prev) =>
-      prev.includes(serviceId) ? prev.filter((sid) => sid !== serviceId) : [...prev, serviceId]
-    );
+    setQuantities((prev) => {
+      if (prev[serviceId] > 0) {
+        const { [serviceId]: _removed, ...rest } = prev;
+        return rest;
+      }
+
+      const service = services.find((s) => s._id === serviceId);
+      const currentHasNonCombinable = Object.keys(prev).some(
+        (sid) => services.find((s) => s._id === sid)?.combinable === false
+      );
+      // A non-combinable service must be booked alone — selecting one replaces
+      // the whole selection, and selecting anything while one is already
+      // selected also starts a fresh selection with just the new pick.
+      if (service?.combinable === false || currentHasNonCombinable) return { [serviceId]: 1 };
+      return { ...prev, [serviceId]: 1 };
+    });
   }
 
-  const selectedServices = useMemo(
-    () => services.filter((s) => selectedServiceIds.includes(s._id)),
-    [services, selectedServiceIds]
+  function changeQuantity(serviceId: string, delta: number) {
+    setQuantities((prev) => {
+      const next = Math.max(0, Math.min(MAX_QUANTITY, (prev[serviceId] ?? 0) + delta));
+      if (next === 0) {
+        const { [serviceId]: _removed, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [serviceId]: next };
+    });
+  }
+
+  // Expanded with repeats — this is what the booking API actually receives, so
+  // requesting quantity 3 of a service sends its id three times in a row.
+  const selectedServiceIds = useMemo(
+    () => Object.entries(quantities).flatMap(([id, qty]) => Array(qty).fill(id)),
+    [quantities]
   );
-  const totalPrice = selectedServices.reduce((sum, s) => sum + s.price, 0);
-  const totalDuration = selectedServices.reduce((sum, s) => sum + s.durationMinutes, 0);
+
+  const selectedServices = useMemo(
+    () => services.filter((s) => quantities[s._id] > 0),
+    [services, quantities]
+  );
+  const totalPrice = selectedServiceIds.reduce((sum, sid) => sum + (services.find((s) => s._id === sid)?.price ?? 0), 0);
+  const totalDuration = selectedServiceIds.reduce(
+    (sum, sid) => sum + (services.find((s) => s._id === sid)?.durationMinutes ?? 0),
+    0
+  );
 
   const { data: availability, isLoading: slotsLoading } = useAvailabilityMulti(id, selectedServiceIds, selectedDate);
   const slots = useMemo(() => availability?.slots ?? [], [availability]);
@@ -109,6 +149,8 @@ export default function BusinessProfilePage() {
         });
       } else if (err instanceof ApiError && err.code === 'STAFF_CANNOT_PERFORM') {
         setFeedback({ type: 'error', message: t('business.staffCannotPerformCombo') });
+      } else if (err instanceof ApiError && err.code === 'SERVICE_NOT_COMBINABLE') {
+        setFeedback({ type: 'error', message: t('biz.serviceNotCombinable') });
       } else if (err instanceof ApiError && err.code === 'ACCOUNT_BLOCKED') {
         const until = err.data?.until ? new Date(err.data.until as string).toLocaleString() : '';
         setFeedback({ type: 'error', message: t('auth.accountBlocked', { until }) });
@@ -142,7 +184,7 @@ export default function BusinessProfilePage() {
       {selectedServices.length > 0 && (
         <div className="rounded-xl border border-border bg-bg px-3.5 py-2.5 text-xs text-text-muted">
           {t('business.selectedServicesSummary', {
-            count: selectedServices.length,
+            count: selectedServiceIds.length,
             minutes: totalDuration,
             price: totalPrice === 0 ? t('business.free') : `${totalPrice}₴`,
           })}
@@ -198,8 +240,10 @@ export default function BusinessProfilePage() {
               <ServiceRow
                 key={svc._id}
                 service={svc}
-                selected={selectedServiceIds.includes(svc._id)}
-                onSelect={() => toggleService(svc._id)}
+                quantity={quantities[svc._id] ?? 0}
+                onToggle={() => toggleService(svc._id)}
+                onIncrement={() => changeQuantity(svc._id, 1)}
+                onDecrement={() => changeQuantity(svc._id, -1)}
               />
             ))}
           </section>

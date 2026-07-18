@@ -13,6 +13,7 @@ import {
   useDeleteAdminBusiness,
   useBlockBusiness,
   useUnblockBusiness,
+  useGrantBusinessTop,
   useMe,
 } from '@/lib/hooks';
 import { ApiError } from '@/lib/utils/api';
@@ -27,7 +28,9 @@ export default function AdminBusinessDetailPage() {
   const deleteBusiness = useDeleteAdminBusiness();
   const block = useBlockBusiness();
   const unblock = useUnblockBusiness();
+  const grantTop = useGrantBusinessTop();
   const [showBlockModal, setShowBlockModal] = useState(false);
+  const [topDays, setTopDays] = useState('14');
 
   const isSuperAdmin = meData?.user?.role === 'SUPER_ADMIN';
 
@@ -134,6 +137,40 @@ export default function AdminBusinessDetailPage() {
           >
             <Rocket size={14} /> {t('admin.viewBusinessTopRequests')}
           </Link>
+        </div>
+
+        <div className="flex flex-col gap-3 rounded-2xl border border-top/30 bg-top/5 p-5 text-sm shadow-sm">
+          <div className="flex items-center justify-between">
+            <h2 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-top">
+              <Rocket size={14} /> {t('admin.grantTop')}
+            </h2>
+            {business.top?.active && (
+              <span className="text-xs font-semibold text-top">
+                {t('admin.grantTopActiveUntil', {
+                  date: business.top.until ? new Date(business.top.until).toLocaleDateString() : '',
+                })}
+              </span>
+            )}
+          </div>
+          <p className="text-xs text-text-muted">{t('admin.grantTopHint')}</p>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={1}
+              max={365}
+              value={topDays}
+              onChange={(e) => setTopDays(e.target.value)}
+              className="w-24 rounded-xl border border-border bg-surface px-3 py-2 text-sm text-text outline-none focus:border-top"
+            />
+            <span className="text-xs text-text-muted">{t('admin.grantTopDays')}</span>
+            <button
+              onClick={() => grantTop.mutate({ id: business._id, durationDays: Number(topDays) })}
+              disabled={grantTop.isPending || !Number(topDays) || Number(topDays) <= 0}
+              className="ml-auto rounded-xl bg-top px-4 py-2 text-xs font-bold text-white transition hover:-translate-y-0.5 disabled:opacity-60"
+            >
+              {t('admin.grantTopAction')}
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-5 text-sm shadow-sm">

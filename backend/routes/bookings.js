@@ -111,6 +111,7 @@ router.post('/', requireAuth, requireRole('CLIENT'), bookingLimiter, asyncHandle
             status: 'confirmed',
             comment,
             commissionRate: resolveCommissionRate(business.createdAt, Number(process.env.COMMISSION_PLATFORM) || 0.02),
+            autoAssignedStaff: true,
           },
         ],
         { session }
@@ -161,6 +162,7 @@ router.post('/group', requireAuth, requireRole('CLIENT'), bookingLimiter, asyncH
     typeof businessId !== 'string' ||
     !Array.isArray(serviceIds) ||
     serviceIds.length < 1 ||
+    serviceIds.length > 20 ||
     !serviceIds.every((id) => typeof id === 'string') ||
     typeof staffId !== 'string' ||
     typeof date !== 'string' ||
@@ -181,19 +183,29 @@ router.post('/group', requireAuth, requireRole('CLIENT'), bookingLimiter, asyncH
     return res.status(403).json({ error: 'ACCOUNT_BLOCKED', until: client.blockedUntil });
   }
 
+  // serviceIds may repeat the same id — booking one service multiple times (e.g. a
+  // sauna for 3 hours instead of 1 by picking it 3x instead of making 3 separate
+  // bookings). $in dedupes automatically, so validate against the unique id set.
+  const uniqueServiceIds = [...new Set(serviceIds)];
   const [business, staff, services] = await Promise.all([
     Business.findOne({ _id: businessId, status: 'ACTIVE' }),
     Staff.findOne({ _id: staffId, business: businessId, active: true }),
-    Service.find({ _id: { $in: serviceIds }, business: businessId, active: true }).lean(),
+    Service.find({ _id: { $in: uniqueServiceIds }, business: businessId, active: true }).lean(),
   ]);
-  if (!business || !staff || services.length !== serviceIds.length) return res.status(404).json({ error: 'NOT_FOUND' });
+  if (!business || !staff || services.length !== uniqueServiceIds.length) return res.status(404).json({ error: 'NOT_FOUND' });
 
-  // Preserve the order the client selected them in, not Mongo's $in order.
+  // Preserve the order (and repeats) the client selected them in, not Mongo's $in order.
   const byId = new Map(services.map((s) => [String(s._id), s]));
   const orderedServices = serviceIds.map((id) => byId.get(id));
 
   const canPerformAll = orderedServices.every((s) => !s.staff?.length || s.staff.some((id) => String(id) === staffId));
   if (!canPerformAll) return res.status(400).json({ error: 'STAFF_CANNOT_PERFORM' });
+
+  // A non-combinable service must be booked alone — repeating the SAME service (e.g.
+  // the sauna x3) is fine, only mixing in a genuinely different service is rejected.
+  if (uniqueServiceIds.length > 1 && orderedServices.some((s) => s.combinable === false)) {
+    return res.status(400).json({ error: 'SERVICE_NOT_COMBINABLE' });
+  }
 
   const totalDuration = orderedServices.reduce((sum, s) => sum + s.durationMinutes, 0);
 
@@ -245,6 +257,7 @@ router.post('/group', requireAuth, requireRole('CLIENT'), bookingLimiter, asyncH
           comment,
           commissionRate: resolveCommissionRate(business.createdAt, Number(process.env.COMMISSION_PLATFORM) || 0.02),
           groupId,
+          autoAssignedStaff: true,
         };
         offsetMinutes += service.durationMinutes;
         return doc;

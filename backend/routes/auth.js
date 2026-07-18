@@ -218,6 +218,15 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
   res.json({ user: publicUser(user) });
 }));
 
+// Refresh tokens rotate on every use (see issueSession) so a leaked one is only ever
+// good for a single replay. That rotation is otherwise indistinguishable from a bug:
+// a browser tab can fire two /refresh calls close together (e.g. several role-gated
+// layouts each mounting their own useMe()/useBusinessMe() on a full page reload, or
+// two tabs open at once) — the second one arrives after the first already rotated the
+// token out, and without this grace window it would hard-fail with UNAUTHENTICATED,
+// forcing a real logout even though the session was perfectly valid seconds earlier.
+const REFRESH_GRACE_MS = 10 * 1000;
+
 router.post('/refresh', asyncHandler(async (req, res) => {
   const token = req.cookies?.refreshToken;
   if (!token) return res.status(401).json({ error: 'UNAUTHENTICATED' });
@@ -233,8 +242,16 @@ router.post('/refresh', asyncHandler(async (req, res) => {
   const tokenHash = hashToken(token);
   const stored = user?.refreshTokens.find((rt) => rt.token === tokenHash);
   if (!user || !stored) return res.status(401).json({ error: 'UNAUTHENTICATED' });
+  if (stored.expiresAt < new Date()) return res.status(401).json({ error: 'UNAUTHENTICATED' });
 
-  user.refreshTokens = user.refreshTokens.filter((rt) => rt.token !== tokenHash);
+  const graceCutoff = new Date(Date.now() + REFRESH_GRACE_MS);
+  if (stored.expiresAt > graceCutoff) {
+    // First use of this token — shrink its remaining lifetime to the grace window
+    // instead of deleting it outright, so a near-simultaneous duplicate request can
+    // still succeed. Already-in-grace tokens are left as-is (not re-extended) so a
+    // stolen token can't be kept alive indefinitely by repeatedly polling it.
+    stored.expiresAt = graceCutoff;
+  }
   await issueSession(res, user);
   res.json({ user: publicUser(user) });
 }));

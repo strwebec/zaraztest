@@ -6,6 +6,7 @@ import {
   addFavorite,
   addStaffTimeOff,
   approveAdminBusiness,
+  assignBusinessBookingStaff,
   approveAdminCategory,
   approveAdminReview,
   blockAdminBusiness,
@@ -37,6 +38,7 @@ import {
   fetchAdminAuditLog,
   fetchAdminBusinessDetail,
   fetchAdminBusinesses,
+  grantAdminBusinessTop,
   fetchAdminCategories,
   fetchAdminFinanceOverview,
   fetchAdminInvoices,
@@ -431,6 +433,7 @@ export function useCreateManualBooking() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['business-bookings'] });
       qc.invalidateQueries({ queryKey: ['business-stats'] });
+      qc.invalidateQueries({ queryKey: ['business-analytics'] });
     },
   });
 }
@@ -442,6 +445,7 @@ function useBusinessBookingMutation(fn: (id: string) => Promise<unknown>) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['business-bookings'] });
       qc.invalidateQueries({ queryKey: ['business-stats'] });
+      qc.invalidateQueries({ queryKey: ['business-analytics'] });
       qc.invalidateQueries({ queryKey: ['week-availability'] });
       qc.invalidateQueries({ queryKey: ['service-week-availability'] });
     },
@@ -468,6 +472,19 @@ export function useUpdateBookingDuration() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['business-bookings'] });
       qc.invalidateQueries({ queryKey: ['business-stats'] });
+      qc.invalidateQueries({ queryKey: ['business-analytics'] });
+      qc.invalidateQueries({ queryKey: ['week-availability'] });
+      qc.invalidateQueries({ queryKey: ['service-week-availability'] });
+    },
+  });
+}
+
+export function useAssignBookingStaff() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, staffId }: { id: string; staffId: string }) => assignBusinessBookingStaff(id, staffId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['business-bookings'] });
       qc.invalidateQueries({ queryKey: ['week-availability'] });
       qc.invalidateQueries({ queryKey: ['service-week-availability'] });
     },
@@ -487,6 +504,7 @@ export function useRescheduleBusinessBooking() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['business-bookings'] });
       qc.invalidateQueries({ queryKey: ['business-stats'] });
+      qc.invalidateQueries({ queryKey: ['business-analytics'] });
       qc.invalidateQueries({ queryKey: ['week-availability'] });
       qc.invalidateQueries({ queryKey: ['service-week-availability'] });
     },
@@ -787,6 +805,18 @@ export function useBlockBusiness() {
 
 export function useUnblockBusiness() {
   return useAdminBusinessMutation(unblockAdminBusiness);
+}
+
+export function useGrantBusinessTop() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, durationDays }: { id: string; durationDays: number }) => grantAdminBusinessTop(id, durationDays),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-businesses'] });
+      qc.invalidateQueries({ queryKey: ['admin-business-detail'] });
+      qc.invalidateQueries({ queryKey: ['admin-overview'] });
+    },
+  });
 }
 
 export function useAdminBusinessDetail(id: string) {

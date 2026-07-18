@@ -24,7 +24,11 @@ function buildCsp(nonce: string) {
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${IS_DEV ? " 'unsafe-eval'" : ''}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data:",
+    // Uploaded photos (business covers/galleries, staff, avatars) are served from
+    // Cloudinary in production once CLOUDINARY_* env vars are set — without this,
+    // the browser silently blocks every one of those images (broken img, alt text
+    // shown instead) while the upload itself succeeds and the URL is perfectly valid.
+    "img-src 'self' data: https://res.cloudinary.com",
     "font-src 'self'",
     "connect-src 'self'",
     "object-src 'none'",

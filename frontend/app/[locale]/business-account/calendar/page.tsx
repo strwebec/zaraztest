@@ -20,6 +20,7 @@ import {
   useNoShowBusinessBooking,
   useRescheduleBusinessBooking,
   useUpdateBookingDuration,
+  useAssignBookingStaff,
   ApiError,
 } from '@/lib/hooks';
 import type { BusinessBooking } from '@/lib/utils/api';
@@ -91,6 +92,9 @@ export default function BusinessCalendarPage() {
   const [durationInput, setDurationInput] = useState('');
   const [durationError, setDurationError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [assigningStaff, setAssigningStaff] = useState(false);
+  const [assignStaffId, setAssignStaffId] = useState('');
+  const [assignError, setAssignError] = useState<string | null>(null);
 
   const { data: bizData } = useBusinessMe();
   const { data: staffData } = useBusinessStaff();
@@ -102,6 +106,7 @@ export default function BusinessCalendarPage() {
   const rescheduleMutation = useRescheduleBusinessBooking();
   const readyMutation = useMarkBookingReady();
   const durationMutation = useUpdateBookingDuration();
+  const assignStaffMutation = useAssignBookingStaff();
 
   const bookings = data?.bookings ?? [];
   const from = data?.from ?? anchorDate;
@@ -411,6 +416,7 @@ export default function BusinessCalendarPage() {
           onClick={() => {
             setSelectedBooking(null);
             setEditingDuration(false);
+            setAssigningStaff(false);
           }}
         >
           <div
@@ -419,7 +425,12 @@ export default function BusinessCalendarPage() {
           >
             <h3 className="font-display text-lg font-bold text-text">{selected.clientName}</h3>
             <p className="text-sm text-text-muted">
-              {selected.service.name} · {selected.staff.name}
+              {selected.service.name} ·{' '}
+              {selected.autoAssignedStaff ? (
+                <span className="font-semibold text-warning">{t('biz.staffUnassigned')}</span>
+              ) : (
+                selected.staff.name
+              )}
             </p>
             <p className="font-mono text-sm text-text-muted">
               {selected.date} · {selected.startTime}
@@ -508,6 +519,68 @@ export default function BusinessCalendarPage() {
             {selected.readyAt && (
               <p className="text-xs font-semibold text-success">{t('biz.readyMarked')}</p>
             )}
+            {selected.status === 'confirmed' &&
+              (assigningStaff ? (
+                <div className="flex flex-col gap-2 rounded-xl border border-border bg-bg p-3">
+                  <span className="text-xs font-semibold text-text-muted">{t('biz.assignStaffLabel')}</span>
+                  <select
+                    value={assignStaffId}
+                    onChange={(e) => setAssignStaffId(e.target.value)}
+                    className="rounded-lg border border-border bg-surface px-3 py-2 text-xs text-text outline-none focus:border-primary"
+                  >
+                    <option value="" disabled>
+                      {t('biz.master')}
+                    </option>
+                    {staffList.map((s) => (
+                      <option key={s._id} value={s._id}>
+                        {s.name}
+                      </option>
+                    ))}
+                  </select>
+                  {assignError && <p className="text-xs text-danger">{assignError}</p>}
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        if (!assignStaffId) return;
+                        setAssignError(null);
+                        assignStaffMutation.mutate(
+                          { id: selected._id, staffId: assignStaffId },
+                          {
+                            onSuccess: (res) => {
+                              setSelectedBooking(res.booking);
+                              setAssigningStaff(false);
+                            },
+                            onError: (err) => setAssignError(describeActionError(err)),
+                          }
+                        );
+                      }}
+                      disabled={assignStaffMutation.isPending || !assignStaffId}
+                      className="rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60"
+                    >
+                      {t('biz.assignStaffConfirm')}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setAssigningStaff(false);
+                        setAssignError(null);
+                      }}
+                      className="rounded-lg px-3 py-1.5 text-xs font-semibold text-text-muted"
+                    >
+                      {t('biz.cancelBooking')}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={() => {
+                    setAssignStaffId(selected.staff._id);
+                    setAssigningStaff(true);
+                  }}
+                  className="self-start text-xs font-semibold text-primary"
+                >
+                  {selected.autoAssignedStaff ? t('biz.assignStaffAction') : t('biz.reassignStaffAction')}
+                </button>
+              ))}
             {actionError && <p className="text-xs text-danger">{actionError}</p>}
             {selected.status === 'confirmed' && (
               <div className="flex flex-col gap-2 pt-2">

@@ -8,6 +8,13 @@ const bookingSchema = new mongoose.Schema(
     business: { type: mongoose.Schema.Types.ObjectId, ref: 'Business', required: true, index: true },
     service: { type: mongoose.Schema.Types.ObjectId, ref: 'Service', required: true },
     staff: { type: mongoose.Schema.Types.ObjectId, ref: 'Staff', required: true, index: true },
+    // True when the client just picked a time slot and the system auto-picked whichever
+    // staff member happened to be free for it (today's client-facing flow has no explicit
+    // master picker) — as opposed to a specific master the business itself assigned (manual
+    // bookings) or that a business later confirmed via PATCH /bookings/:id/assign-staff.
+    // `staff` is still set even while this is true (needed to hold the calendar slot and
+    // guarantee no double-booking) — the UI just shows it as unassigned until confirmed.
+    autoAssignedStaff: { type: Boolean, default: false },
 
     date: { type: String, required: true }, // YYYY-MM-DD
     startTime: { type: String, required: true }, // HH:mm

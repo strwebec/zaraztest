@@ -31,6 +31,7 @@ export default function ClientBookingsPage() {
   const [rescheduleError, setRescheduleError] = useState<string | null>(null);
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewFeedback, setReviewFeedback] = useState<string | null>(null);
+  const [reviewModalError, setReviewModalError] = useState<string | null>(null);
   const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
   const tabs: { key: Tab; label: string }[] = [
@@ -70,14 +71,17 @@ export default function ClientBookingsPage() {
 
   async function handleSubmitReview(rating: number, text: string) {
     if (!reviewingId) return;
+    setReviewModalError(null);
     try {
       const result = await reviewMutation.mutateAsync({ bookingId: reviewingId, payload: { rating, text } });
       setReviewingId(null);
       setReviewFeedback(
         (result.needsModeration ? t('client.reviewPendingModeration') : t('client.reviewPublished')) as string
       );
-    } catch {
-      setReviewFeedback(t('auth.genericError') as string);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'ALREADY_REVIEWED') setReviewModalError(t('client.alreadyReviewed') as string);
+      else if (err instanceof ApiError && err.code === 'INVALID_INPUT') setReviewModalError(t('client.reviewInvalid') as string);
+      else setReviewModalError(t('auth.genericError') as string);
     }
   }
 
@@ -210,6 +214,7 @@ export default function ClientBookingsPage() {
                         <button
                           onClick={() => {
                             setReviewFeedback(null);
+                            setReviewModalError(null);
                             setReviewingId(bk._id);
                           }}
                           className="self-start rounded-xl border border-primary/40 px-4 py-2 text-xs font-semibold text-primary transition hover:bg-primary-glow"
@@ -244,8 +249,12 @@ export default function ClientBookingsPage() {
         <ReviewModal
           businessName={reviewingBooking.business.name}
           onSubmit={handleSubmitReview}
-          onClose={() => setReviewingId(null)}
+          onClose={() => {
+            setReviewingId(null);
+            setReviewModalError(null);
+          }}
           isPending={reviewMutation.isPending}
+          error={reviewModalError}
         />
       )}
     </div>
