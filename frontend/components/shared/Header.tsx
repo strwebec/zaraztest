@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
@@ -112,7 +113,9 @@ export function Header({ locale, city }: { locale: Locale; city?: string }) {
               {t('nav.forBusiness')}
             </Link>
           )}
-          <LangToggle locale={locale} />
+          <Suspense fallback={<div className="h-9 w-[72px] rounded-xl border border-border bg-surface" />}>
+            <LangToggle locale={locale} />
+          </Suspense>
           {user ? (
             <button
               onClick={() => router.push(roleHomeHref(locale, user.role))}

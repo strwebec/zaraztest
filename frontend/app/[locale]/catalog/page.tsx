@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useParams, useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { Search } from 'lucide-react';
@@ -15,6 +15,14 @@ import type { Locale } from '@/lib/i18n';
 const CITY_SLUG = DEFAULT_CITY_SLUG;
 
 export default function CatalogPage() {
+  return (
+    <Suspense fallback={null}>
+      <CatalogPageInner />
+    </Suspense>
+  );
+}
+
+function CatalogPageInner() {
   const { t, i18n } = useTranslation();
   const router = useRouter();
   const pathname = usePathname();

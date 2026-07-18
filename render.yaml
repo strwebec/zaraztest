@@ -11,6 +11,11 @@
 #   - zaraz-backend  -> ALLOWED_ORIGIN = the frontend's URL (https://zaraz-frontend.onrender.com)
 #   - zaraz-frontend -> BACKEND_URL    = the backend's URL  (https://zaraz-backend.onrender.com)
 # Then trigger a manual redeploy on both so the new values take effect.
+#
+# The backend also fails to start without LEDGER_ENCRYPTION_KEY, MONGODB_URI, and
+# ALLOWED_ORIGIN set (see backend/server.js's assertRequiredEnv) — these three are not
+# optional, unlike the Cloudinary/SMTP/Google Sheets vars below. Generate the encryption
+# key with: node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 
 services:
   - type: web

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
@@ -22,6 +22,14 @@ const STATUS_STYLE: Record<string, string> = {
 const FILTERS = ['AWAITING_VERIFICATION', 'PENDING', 'OVERDUE', 'BLOCKED', 'PAID'] as const;
 
 export default function AdminInvoicesPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminInvoicesPageInner />
+    </Suspense>
+  );
+}
+
+function AdminInvoicesPageInner() {
   const { t } = useTranslation();
   const { locale } = useParams<{ locale: Locale }>();
   const searchParams = useSearchParams();

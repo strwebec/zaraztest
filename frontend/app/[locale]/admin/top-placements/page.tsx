@@ -1,5 +1,6 @@
 'use client';
 
+import { Suspense } from 'react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
@@ -16,6 +17,14 @@ const PACKAGE_LABEL: Record<string, string> = {
 };
 
 export default function AdminTopPlacementsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminTopPlacementsPageInner />
+    </Suspense>
+  );
+}
+
+function AdminTopPlacementsPageInner() {
   const { t } = useTranslation();
   const { locale } = useParams<{ locale: Locale }>();
   const searchParams = useSearchParams();
