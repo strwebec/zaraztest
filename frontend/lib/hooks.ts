@@ -97,6 +97,8 @@ import {
   unblockAdminBusiness,
   unblockAdminUser,
   updateAdminRequisites,
+  updateAdminOwnCredentials,
+  updateAdminTeamMemberCredentials,
   updateBookingDuration,
   updateBusinessMe,
   updateBusinessWorkingHours,
@@ -690,6 +692,23 @@ export function useRemoveTeamMember() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: removeAdminTeamMember,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-team'] }),
+  });
+}
+
+export function useUpdateAdminOwnCredentials() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: updateAdminOwnCredentials,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['me'] }),
+  });
+}
+
+export function useUpdateAdminTeamMemberCredentials() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: { newEmail?: string; newPassword?: string } }) =>
+      updateAdminTeamMemberCredentials(id, payload),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-team'] }),
   });
 }

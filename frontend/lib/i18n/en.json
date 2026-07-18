@@ -564,6 +564,13 @@
     "roleModeratorHint": "Moderator: approves businesses, moderates reviews and TOP placements. No access to billing.",
     "roleFinanceHint": "Finance: views and marks invoices as paid. No access to business or review moderation.",
     "removeMember": "Remove",
+    "myCredentials": "My login details",
+    "newEmailOptional": "New email (optional)",
+    "newPasswordOptional": "New password (optional)",
+    "saveCredentials": "Save",
+    "credentialsUpdated": "Login details updated",
+    "editCredentials": "Change login details",
+    "resetCredentials": "Save new details",
     "auditLog": "Audit log",
     "auditLogHint": "The last 200 admin actions: blocks, deletions, payment approvals, and more.",
     "noAuditEntries": "No audit log entries yet"

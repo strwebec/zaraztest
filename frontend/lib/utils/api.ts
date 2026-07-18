@@ -858,6 +858,14 @@ export function removeAdminTeamMember(id: string) {
   return apiDelete<{ ok: boolean }>(`/admin/team/${id}`);
 }
 
+export function updateAdminOwnCredentials(payload: { currentPassword: string; newEmail?: string; newPassword?: string }) {
+  return apiPatch<{ user: { id: string; name: string; email: string; role: string } }>('/admin/me/credentials', payload);
+}
+
+export function updateAdminTeamMemberCredentials(id: string, payload: { newEmail?: string; newPassword?: string }) {
+  return apiPatch<{ member: TeamMember }>(`/admin/team/${id}/credentials`, payload);
+}
+
 export function fetchAdminOverview() {
   return apiGet<AdminOverview>('/admin/overview');
 }

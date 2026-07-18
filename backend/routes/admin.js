@@ -783,6 +783,86 @@ router.post(
   })
 );
 
+// Self-service — any admin-role user changes their own login. Requires the
+// current password, same as the client-facing equivalent, since this is the
+// account holder acting on themselves rather than a super-admin resetting
+// someone else's.
+router.patch(
+  '/me/credentials',
+  asyncHandler(async (req, res) => {
+    const { currentPassword, newEmail, newPassword } = req.body || {};
+    if (typeof currentPassword !== 'string' || !currentPassword) {
+      return res.status(400).json({ error: 'INVALID_INPUT' });
+    }
+    if (newEmail === undefined && newPassword === undefined) {
+      return res.status(400).json({ error: 'INVALID_INPUT' });
+    }
+    if (newEmail !== undefined && !EMAIL_RE.test(newEmail || '')) {
+      return res.status(400).json({ error: 'INVALID_INPUT' });
+    }
+    if (newPassword !== undefined && (typeof newPassword !== 'string' || newPassword.length < 8)) {
+      return res.status(400).json({ error: 'WEAK_PASSWORD' });
+    }
+
+    const user = await User.findById(req.userId);
+    if (!user) return res.status(401).json({ error: 'UNAUTHENTICATED' });
+
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
+
+    if (newEmail !== undefined) {
+      const existing = await User.findOne({ email: newEmail.toLowerCase(), _id: { $ne: user._id } });
+      if (existing) return res.status(409).json({ error: 'EMAIL_TAKEN' });
+      user.email = newEmail.toLowerCase();
+    }
+    if (newPassword !== undefined) {
+      user.passwordHash = await bcrypt.hash(newPassword, 12);
+    }
+    await user.save();
+
+    await logAdminAction(req, { action: 'team.selfUpdateCredentials', targetType: 'User', targetId: user._id, targetLabel: user.email });
+
+    res.json({ user: { id: user._id, name: user.name, email: user.email, role: user.role } });
+  })
+);
+
+// Super-admin resetting a team member's login — no current-password check,
+// since this is the elevated account acting on someone else's, not the
+// member acting on their own (that's /me/credentials above).
+router.patch(
+  '/team/:id/credentials',
+  onlySuperAdmin,
+  asyncHandler(async (req, res) => {
+    const { newEmail, newPassword } = req.body || {};
+    if (newEmail === undefined && newPassword === undefined) {
+      return res.status(400).json({ error: 'INVALID_INPUT' });
+    }
+    if (newEmail !== undefined && !EMAIL_RE.test(newEmail || '')) {
+      return res.status(400).json({ error: 'INVALID_INPUT' });
+    }
+    if (newPassword !== undefined && (typeof newPassword !== 'string' || newPassword.length < 8)) {
+      return res.status(400).json({ error: 'WEAK_PASSWORD' });
+    }
+
+    const member = await User.findOne({ _id: req.params.id, role: { $in: INVITABLE_ROLES } });
+    if (!member) return res.status(404).json({ error: 'NOT_FOUND' });
+
+    if (newEmail !== undefined) {
+      const existing = await User.findOne({ email: newEmail.toLowerCase(), _id: { $ne: member._id } });
+      if (existing) return res.status(409).json({ error: 'EMAIL_TAKEN' });
+      member.email = newEmail.toLowerCase();
+    }
+    if (newPassword !== undefined) {
+      member.passwordHash = await bcrypt.hash(newPassword, 12);
+    }
+    await member.save();
+
+    await logAdminAction(req, { action: 'team.resetCredentials', targetType: 'User', targetId: member._id, targetLabel: `${member.name} (${member.email})` });
+
+    res.json({ member: { id: member._id, name: member.name, email: member.email, role: member.role } });
+  })
+);
+
 router.delete(
   '/team/:id',
   onlySuperAdmin,
