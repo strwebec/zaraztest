@@ -1,37 +1,66 @@
 const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
+
+// Resend sends over HTTPS, not a raw SMTP socket — many hosts (free-tier PaaS
+// containers especially) block outbound SMTP ports entirely, which makes
+// nodemailer hang or fail on every send. Prefer Resend whenever it's
+// configured; SMTP stays available as a fallback for hosts where it does
+// work, and logging-only stays the last resort for local dev.
+let resend = null;
+if (process.env.RESEND_API_KEY) {
+  resend = new Resend(process.env.RESEND_API_KEY);
+}
 
 let transporter = null;
-if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+if (!resend && process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
   transporter = nodemailer.createTransport({
     host: process.env.SMTP_HOST,
     port: Number(process.env.SMTP_PORT) || 587,
     auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
-    // Some hosts (notably free-tier PaaS containers) block outbound SMTP ports
-    // entirely, which otherwise hangs the connection attempt for minutes. Fail
-    // fast so a blocked/broken mail server can never take the whole request
-    // (and the caller's DB writes that already succeeded) down with it.
+    // Fail fast rather than hang for minutes if the port turns out to be blocked.
     connectionTimeout: 8000,
     greetingTimeout: 8000,
     socketTimeout: 8000,
   });
 }
 
+function logDevFallback(to, subject, html) {
+  console.log(`[mailer:dev-fallback] would send email to ${to}\nSubject: ${subject}\n${html}`);
+}
+
 // By the time this is called, the caller has already persisted whatever the
-// email is confirming (a new account, a verification code) — a mail server
-// being slow, misconfigured, or blocked by the host must never turn into a
-// 500 that hides a registration that actually succeeded. Always log the
-// dev-mode fallback line on failure too, so the verification code stays
-// recoverable from server logs even when real delivery is broken.
+// email is confirming (a new account, a verification code) — a mail
+// provider being slow, misconfigured, or blocked by the host must never
+// turn into a 500 that hides a registration that actually succeeded.
+// Always log the dev-mode fallback line on failure too, so the verification
+// code stays recoverable from server logs even when real delivery is broken.
 async function sendMail({ to, subject, html }) {
+  if (resend) {
+    try {
+      const { error } = await resend.emails.send({
+        from: process.env.RESEND_FROM || 'ZARAZ <onboarding@resend.dev>',
+        to,
+        subject,
+        html,
+      });
+      if (error) throw new Error(error.message || JSON.stringify(error));
+      return;
+    } catch (err) {
+      console.error(`[mailer] Resend send failed for ${to}:`, err.message);
+      logDevFallback(to, subject, html);
+      return;
+    }
+  }
+
   if (!transporter) {
-    console.log(`[mailer:dev] would send email to ${to}\nSubject: ${subject}\n${html}`);
+    logDevFallback(to, subject, html);
     return;
   }
   try {
     await transporter.sendMail({ from: process.env.SMTP_USER, to, subject, html });
   } catch (err) {
-    console.error(`[mailer] send failed for ${to}:`, err.message);
-    console.log(`[mailer:dev-fallback] would send email to ${to}\nSubject: ${subject}\n${html}`);
+    console.error(`[mailer] SMTP send failed for ${to}:`, err.message);
+    logDevFallback(to, subject, html);
   }
 }
 

@@ -58,7 +58,14 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
-      # Optional — leave blank to have emails logged to the Render console instead of sent.
+      # Preferred email path — sends over HTTPS, so it works on hosts (like this one)
+      # that block outbound SMTP ports. Free tier at resend.com.
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM
+        sync: false
+      # SMTP — only used if RESEND_API_KEY is blank. Leave blank to have emails
+      # logged to the Render console instead of sent.
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
