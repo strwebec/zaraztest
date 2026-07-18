@@ -1,9 +1,11 @@
 'use client';
 
 import { Check } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { Service } from '@/lib/utils/api';
 
 export function ServiceRow({ service, selected, onSelect }: { service: Service; selected: boolean; onSelect: () => void }) {
+  const { t } = useTranslation();
   return (
     <button
       onClick={onSelect}
@@ -24,7 +26,13 @@ export function ServiceRow({ service, selected, onSelect }: { service: Service; 
           <div className="mt-0.5 text-xs text-text-muted sm:text-[12.5px]">{service.durationMinutes} хв</div>
         </div>
       </div>
-      <div className="font-mono text-base font-semibold text-text sm:text-[17px]">{service.price}₴</div>
+      <div
+        className={`text-base font-semibold sm:text-[17px] ${
+          service.isFree ? 'text-success' : 'font-mono text-text'
+        }`}
+      >
+        {service.isFree ? t('business.free') : `${service.price}₴`}
+      </div>
     </button>
   );
 }

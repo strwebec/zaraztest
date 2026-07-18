@@ -56,7 +56,7 @@ function AdminInvoicesPageInner() {
     : [];
 
   return (
-    <RequireAdminRole roles={['SUPER_ADMIN', 'FINANCE_ADMIN']}>
+    <RequireAdminRole roles={['SUPER_ADMIN', 'FINANCE_ADMIN']} permission="finance">
     <div className="flex flex-col gap-5">
       {business && (
         <Link

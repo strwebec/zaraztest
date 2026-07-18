@@ -14,7 +14,7 @@ export default function AdminCategoriesPage() {
   const categories = data?.categories ?? [];
 
   return (
-    <RequireAdminRole roles={['SUPER_ADMIN', 'MODERATOR']}>
+    <RequireAdminRole roles={['SUPER_ADMIN', 'MODERATOR']} permission="categories">
       <div className="flex flex-col gap-5">
         <h1 className="font-display text-2xl font-bold text-text">{t('admin.categories')}</h1>
         <p className="text-xs text-text-muted">{t('admin.categoriesHint')}</p>

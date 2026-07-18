@@ -68,6 +68,7 @@ function ServiceEditForm({
   const [name, setName] = useState(service.name);
   const [description, setDescription] = useState(service.description ?? '');
   const [price, setPrice] = useState(String(service.price));
+  const [isFree, setIsFree] = useState(!!service.isFree);
   const [durationMinutes, setDurationMinutes] = useState(String(service.durationMinutes));
   const [staffIds, setStaffIds] = useState<string[]>(service.staff ?? []);
   const [error, setError] = useState('');
@@ -91,15 +92,21 @@ function ServiceEditForm({
         rows={2}
         className="resize-none rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text outline-none focus:border-primary"
       />
+      <label className="flex items-center gap-2 text-xs font-semibold text-text-muted">
+        <input type="checkbox" checked={isFree} onChange={(e) => setIsFree(e.target.checked)} />
+        {t('biz.freeService')}
+      </label>
       <div className="flex gap-2">
-        <input
-          type="number"
-          min={1}
-          value={price}
-          onChange={(e) => setPrice(e.target.value)}
-          placeholder={t('biz.price') as string}
-          className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text outline-none focus:border-primary"
-        />
+        {!isFree && (
+          <input
+            type="number"
+            min={1}
+            value={price}
+            onChange={(e) => setPrice(e.target.value)}
+            placeholder={t('biz.price') as string}
+            className="flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text outline-none focus:border-primary"
+          />
+        )}
         <input
           type="number"
           min={1}
@@ -122,7 +129,8 @@ function ServiceEditForm({
               payload: {
                 name,
                 description,
-                price: Number(price),
+                price: isFree ? 0 : Number(price),
+                isFree,
                 durationMinutes: Number(durationMinutes),
                 staff: staffIds,
               },
@@ -163,6 +171,7 @@ export default function BusinessServicesPage() {
   const [category, setCategory] = useState('');
   const [customCategoryName, setCustomCategoryName] = useState('');
   const [price, setPrice] = useState('');
+  const [isFree, setIsFree] = useState(false);
   const [durationMinutes, setDurationMinutes] = useState('');
   const [staffIds, setStaffIds] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -191,7 +200,8 @@ export default function BusinessServicesPage() {
         description: description || undefined,
         category,
         customCategoryName: category === 'other' ? customCategoryName : undefined,
-        price: Number(price),
+        price: isFree ? 0 : Number(price),
+        isFree,
         durationMinutes: Number(durationMinutes),
         staff: staffIds.length ? staffIds : undefined,
       });
@@ -199,6 +209,7 @@ export default function BusinessServicesPage() {
       setDescription('');
       setCustomCategoryName('');
       setPrice('');
+      setIsFree(false);
       setDurationMinutes('');
       setStaffIds([]);
       setShowForm(false);
@@ -260,16 +271,22 @@ export default function BusinessServicesPage() {
               className="rounded-xl border border-border bg-bg px-4 py-3 text-sm text-text outline-none focus:border-primary"
             />
           )}
+          <label className="flex items-center gap-2 text-sm font-semibold text-text-muted">
+            <input type="checkbox" checked={isFree} onChange={(e) => setIsFree(e.target.checked)} />
+            {t('biz.freeService')}
+          </label>
           <div className="flex gap-3">
-            <input
-              required
-              type="number"
-              min={1}
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
-              placeholder={t('biz.price') as string}
-              className="flex-1 rounded-xl border border-border bg-bg px-4 py-3 text-sm text-text outline-none focus:border-primary"
-            />
+            {!isFree && (
+              <input
+                required
+                type="number"
+                min={1}
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder={t('biz.price') as string}
+                className="flex-1 rounded-xl border border-border bg-bg px-4 py-3 text-sm text-text outline-none focus:border-primary"
+              />
+            )}
             <input
               required
               type="number"
@@ -312,7 +329,9 @@ export default function BusinessServicesPage() {
                   )}
                 </div>
                 <div className="flex items-center gap-4">
-                  <span className="font-mono text-sm font-semibold text-text">{svc.price}₴</span>
+                  <span className={`text-sm font-semibold ${svc.isFree ? 'text-success' : 'font-mono text-text'}`}>
+                    {svc.isFree ? t('biz.free') : `${svc.price}₴`}
+                  </span>
                   <button
                     onClick={() => setEditingId(editingId === svc._id ? null : svc._id)}
                     className="text-xs font-semibold text-primary"

@@ -144,7 +144,7 @@ export default function BusinessProfilePage() {
           {t('business.selectedServicesSummary', {
             count: selectedServices.length,
             minutes: totalDuration,
-            price: totalPrice,
+            price: totalPrice === 0 ? t('business.free') : `${totalPrice}₴`,
           })}
         </div>
       )}

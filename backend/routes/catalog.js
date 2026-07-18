@@ -125,6 +125,7 @@ router.get(
           rating,
           reviews: biz.googleReviewsCount + biz.platformReviewsCount,
           priceFrom: cheapest?.price ?? null,
+          priceFromIsFree: !!cheapest?.isFree,
           coverPhotoUrl: biz.coverPhotoUrl,
           top: !!biz.top?.active,
           nextSlot,

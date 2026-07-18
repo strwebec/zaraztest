@@ -61,8 +61,8 @@ export function BusinessCard({
           {biz.priceFrom != null && (
             <>
               <span>·</span>
-              <span>
-                {t('catalog.priceFrom')} {biz.priceFrom}₴
+              <span className={biz.priceFromIsFree ? 'text-success' : undefined}>
+                {biz.priceFromIsFree ? t('business.free') : `${t('catalog.priceFrom')} ${biz.priceFrom}₴`}
               </span>
             </>
           )}

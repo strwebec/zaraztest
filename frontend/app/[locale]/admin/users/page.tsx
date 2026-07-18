@@ -46,7 +46,7 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <RequireAdminRole roles={['SUPER_ADMIN', 'MODERATOR']}>
+    <RequireAdminRole roles={['SUPER_ADMIN', 'MODERATOR']} permission="users">
       <div className="flex flex-col gap-5">
         <h1 className="font-display text-2xl font-bold text-text">{t('admin.users')}</h1>
 

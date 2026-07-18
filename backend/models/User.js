@@ -1,6 +1,12 @@
 const mongoose = require('mongoose');
 
-const ROLES = ['CLIENT', 'BUSINESS_OWNER', 'MODERATOR', 'FINANCE_ADMIN', 'SUPER_ADMIN'];
+const ROLES = ['CLIENT', 'BUSINESS_OWNER', 'MODERATOR', 'FINANCE_ADMIN', 'ADMIN', 'SUPER_ADMIN'];
+
+// Only meaningful for role: 'ADMIN' — a super-admin picks a subset of these when
+// creating the account, and route access is checked against them (see
+// routes/admin.js's PERMISSION_BUCKETS/requirePermission). MODERATOR/FINANCE_ADMIN
+// keep their existing fixed bundles instead of using this field.
+const PERMISSION_BUCKETS = ['businesses', 'reviews', 'categories', 'topPlacements', 'users', 'finance', 'support'];
 
 const userSchema = new mongoose.Schema(
   {
@@ -32,6 +38,8 @@ const userSchema = new mongoose.Schema(
     consecutiveViolations: { type: Number, default: 0 },
     underReview: { type: Boolean, default: false },
 
+    permissions: { type: [String], enum: PERMISSION_BUCKETS, default: undefined },
+
     business: { type: mongoose.Schema.Types.ObjectId, ref: 'Business' },
     favoriteBusinesses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Business' }],
     termsAcceptedAt: Date,
@@ -41,3 +49,4 @@ const userSchema = new mongoose.Schema(
 
 module.exports = mongoose.model('User', userSchema);
 module.exports.ROLES = ROLES;
+module.exports.PERMISSION_BUCKETS = PERMISSION_BUCKETS;

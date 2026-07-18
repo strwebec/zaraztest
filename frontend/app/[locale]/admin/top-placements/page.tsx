@@ -37,7 +37,7 @@ function AdminTopPlacementsPageInner() {
   const placements = data?.placements ?? [];
 
   return (
-    <RequireAdminRole roles={['SUPER_ADMIN', 'MODERATOR']}>
+    <RequireAdminRole roles={['SUPER_ADMIN', 'MODERATOR']} permission="topPlacements">
     <div className="flex flex-col gap-5">
       {business && (
         <Link

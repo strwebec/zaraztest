@@ -7,9 +7,10 @@ import { useTranslation } from 'react-i18next';
 import { LayoutDashboard, Building2, Star, Rocket, Receipt, BarChart3, Users, UserCog, Tags, ScrollText, LifeBuoy, LogOut } from 'lucide-react';
 import { ClientSidebar, type SidebarTab } from '@/components/client/ClientSidebar';
 import { useMe, useLogout, useAdminSupportThreads, useAdminPendingCounts } from '@/lib/hooks';
+import { hasAdminPermission } from '@/lib/utils/adminPermissions';
 import type { Locale } from '@/lib/i18n';
 
-const ADMIN_ROLES = ['SUPER_ADMIN', 'MODERATOR', 'FINANCE_ADMIN'];
+const ADMIN_ROLES = ['SUPER_ADMIN', 'MODERATOR', 'FINANCE_ADMIN', 'ADMIN'];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const { t } = useTranslation();
@@ -18,10 +19,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const { locale } = useParams<{ locale: Locale }>();
   const { data, isLoading, isError } = useMe();
   const role = data?.user?.role;
+  const permissions = data?.user?.permissions;
   const logoutMutation = useLogout();
-  const canModerate = role === 'SUPER_ADMIN' || role === 'MODERATOR';
-  const { data: supportData } = useAdminSupportThreads(canModerate);
-  const pendingSupportCount = canModerate
+  const can = (bucket: Parameters<typeof hasAdminPermission>[2]) => hasAdminPermission(role, permissions, bucket);
+  const canSupport = can('support');
+  const { data: supportData } = useAdminSupportThreads(canSupport);
+  const pendingSupportCount = canSupport
     ? (supportData?.threads ?? []).filter((th) => th.status !== 'COMPLETED' && th.lastMessageFrom !== 'admin').length
     : 0;
   const { data: pendingCounts } = useAdminPendingCounts(!!role);
@@ -34,34 +37,34 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
   const tabs = [
     { href: `/${locale}/admin/dashboard`, label: t('admin.dashboard'), icon: LayoutDashboard },
-    (role === 'SUPER_ADMIN' || role === 'MODERATOR') && {
+    can('businesses') && {
       href: `/${locale}/admin/businesses`,
       label: t('admin.businesses'),
       icon: Building2,
       badge: pendingCounts?.pendingBusinesses,
     },
-    (role === 'SUPER_ADMIN' || role === 'MODERATOR') && {
+    can('users') && {
       href: `/${locale}/admin/users`,
       label: t('admin.users'),
       icon: UserCog,
     },
-    (role === 'SUPER_ADMIN' || role === 'MODERATOR') && {
+    can('reviews') && {
       href: `/${locale}/admin/reviews`,
       label: t('admin.reviews'),
       icon: Star,
     },
-    (role === 'SUPER_ADMIN' || role === 'MODERATOR') && {
+    can('categories') && {
       href: `/${locale}/admin/categories`,
       label: t('admin.categories'),
       icon: Tags,
     },
-    (role === 'SUPER_ADMIN' || role === 'MODERATOR') && {
+    can('topPlacements') && {
       href: `/${locale}/admin/top-placements`,
       label: t('admin.topPlacements'),
       icon: Rocket,
       badge: pendingCounts?.pendingTopPlacements,
     },
-    (role === 'SUPER_ADMIN' || role === 'FINANCE_ADMIN') && {
+    can('finance') && {
       href: `/${locale}/admin/invoices`,
       label: t('admin.invoices'),
       icon: Receipt,
@@ -72,7 +75,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     role === 'SUPER_ADMIN' && { href: `/${locale}/admin/audit-log`, label: t('admin.auditLog'), icon: ScrollText },
   ].filter(Boolean) as SidebarTab[];
 
-  if (canModerate) {
+  if (canSupport) {
     tabs.push({
       href: `/${locale}/admin/support`,
       label: t('admin.support'),

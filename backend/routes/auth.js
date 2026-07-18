@@ -53,6 +53,7 @@ function publicUser(user) {
     themePref: user.themePref,
     emailVerified: user.emailVerified,
     business: user.business,
+    permissions: user.permissions,
     rating: user.rating,
     blockedUntil: user.blockedUntil && user.blockedUntil > new Date() ? user.blockedUntil : null,
     underReview: user.underReview,

@@ -4,7 +4,12 @@ const crypto = require('crypto');
 const JWT_ALGORITHM = 'HS256';
 
 function signAccessToken(user) {
-  return jwt.sign({ sub: user._id.toString(), role: user.role }, process.env.JWT_ACCESS_SECRET, {
+  const payload = { sub: user._id.toString(), role: user.role };
+  // Only the ADMIN role actually varies per-account — everyone else's access is
+  // fully determined by role name, so this stays empty (and out of the token) for
+  // them rather than bloating every cookie with an unused field.
+  if (user.role === 'ADMIN' && user.permissions?.length) payload.permissions = user.permissions;
+  return jwt.sign(payload, process.env.JWT_ACCESS_SECRET, {
     algorithm: JWT_ALGORITHM,
     expiresIn: process.env.JWT_ACCESS_EXPIRES || '15m',
   });

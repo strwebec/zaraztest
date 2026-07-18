@@ -8,6 +8,7 @@ export type CatalogBusiness = {
   rating: number;
   reviews: number;
   priceFrom: number | null;
+  priceFromIsFree?: boolean;
   coverPhotoUrl?: string;
   top: boolean;
   nextSlot: string | null;
@@ -20,6 +21,7 @@ export type Service = {
   name: string;
   description?: string;
   price: number;
+  isFree?: boolean;
   durationMinutes: number;
   category: string;
   staff: string[];
@@ -63,6 +65,7 @@ export type User = {
   language: 'uk' | 'en';
   emailVerified: boolean;
   business?: string;
+  permissions?: AdminPermissionBucket[];
   rating?: number;
   blockedUntil?: string | null;
   underReview?: boolean;
@@ -724,6 +727,7 @@ export function createBusinessService(payload: {
   name: string;
   description?: string;
   price: number;
+  isFree?: boolean;
   durationMinutes: number;
   category: string;
   customCategoryName?: string;
@@ -736,6 +740,7 @@ export function updateBusinessService(id: string, payload: Partial<{
   name: string;
   description: string;
   price: number;
+  isFree: boolean;
   durationMinutes: number;
   category: string;
   staff: string[];
@@ -833,11 +838,24 @@ export type AdminBusiness = {
   blockReason?: string;
 };
 
+export const ADMIN_PERMISSION_BUCKETS = [
+  'businesses',
+  'reviews',
+  'categories',
+  'topPlacements',
+  'users',
+  'finance',
+  'support',
+] as const;
+
+export type AdminPermissionBucket = (typeof ADMIN_PERMISSION_BUCKETS)[number];
+
 export type TeamMember = {
   _id: string;
   name: string;
   email: string;
-  role: 'SUPER_ADMIN' | 'MODERATOR' | 'FINANCE_ADMIN';
+  role: 'SUPER_ADMIN' | 'MODERATOR' | 'FINANCE_ADMIN' | 'ADMIN';
+  permissions?: AdminPermissionBucket[];
   createdAt: string;
 };
 
@@ -849,7 +867,8 @@ export function inviteAdminTeamMember(payload: {
   name: string;
   email: string;
   password: string;
-  role: 'MODERATOR' | 'FINANCE_ADMIN';
+  role: 'MODERATOR' | 'FINANCE_ADMIN' | 'ADMIN';
+  permissions?: AdminPermissionBucket[];
 }) {
   return apiPost<{ member: TeamMember }>('/admin/team', payload);
 }

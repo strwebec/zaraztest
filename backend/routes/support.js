@@ -5,7 +5,7 @@ const SupportMessage = require('../models/SupportMessage');
 const Notification = require('../models/Notification');
 const User = require('../models/User');
 const { requireAuth } = require('../middleware/auth');
-const { requireRole } = require('../middleware/role');
+const { requirePermission } = require('../middleware/adminPermission');
 const { authedLimiter } = require('../middleware/rateLimit');
 const { asyncHandler } = require('../utils/asyncHandler');
 
@@ -13,7 +13,7 @@ const router = express.Router();
 router.use(requireAuth);
 
 const MAX_MESSAGE_LENGTH = 2000;
-const ADMIN_ROLES = ['SUPER_ADMIN', 'MODERATOR'];
+const adminOnly = requirePermission('support');
 
 function validateText(text) {
   const trimmed = typeof text === 'string' ? text.trim() : '';
@@ -91,7 +91,7 @@ router.post(
 
 router.get(
   '/admin/threads',
-  requireRole(...ADMIN_ROLES),
+  adminOnly,
   asyncHandler(async (_req, res) => {
     const threads = await SupportThread.find({}).sort({ lastMessageAt: -1 }).lean();
     res.json({ threads });
@@ -100,7 +100,7 @@ router.get(
 
 router.get(
   '/admin/threads/:id',
-  requireRole(...ADMIN_ROLES),
+  adminOnly,
   asyncHandler(async (req, res) => {
     const thread = await SupportThread.findById(req.params.id).lean();
     if (!thread) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -111,7 +111,7 @@ router.get(
 
 router.post(
   '/admin/threads/:id/messages',
-  requireRole(...ADMIN_ROLES),
+  adminOnly,
   authedLimiter,
   asyncHandler(async (req, res) => {
     const text = validateText(req.body?.text);
@@ -148,7 +148,7 @@ router.post(
 
 router.post(
   '/admin/threads/:id/read',
-  requireRole(...ADMIN_ROLES),
+  adminOnly,
   asyncHandler(async (req, res) => {
     await SupportThread.updateOne({ _id: req.params.id }, { unreadByAdmin: 0 });
     res.json({ ok: true });
@@ -157,7 +157,7 @@ router.post(
 
 router.post(
   '/admin/threads/:id/resolve',
-  requireRole(...ADMIN_ROLES),
+  adminOnly,
   asyncHandler(async (req, res) => {
     const thread = await SupportThread.findByIdAndUpdate(req.params.id, { status: 'COMPLETED' }, { new: true }).lean();
     if (!thread) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -167,7 +167,7 @@ router.post(
 
 router.post(
   '/admin/threads/:id/reopen',
-  requireRole(...ADMIN_ROLES),
+  adminOnly,
   asyncHandler(async (req, res) => {
     const thread = await SupportThread.findByIdAndUpdate(req.params.id, { status: 'ACTIVE' }, { new: true }).lean();
     if (!thread) return res.status(404).json({ error: 'NOT_FOUND' });

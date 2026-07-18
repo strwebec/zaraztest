@@ -33,7 +33,7 @@ export default function AdminReviewsPage() {
   const reviews = data?.reviews ?? [];
 
   return (
-    <RequireAdminRole roles={['SUPER_ADMIN', 'MODERATOR']}>
+    <RequireAdminRole roles={['SUPER_ADMIN', 'MODERATOR']} permission="reviews">
     <div className="flex flex-col gap-5">
       <h1 className="font-display text-2xl font-bold text-text">{t('admin.reviews')}</h1>
 

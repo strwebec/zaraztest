@@ -705,14 +705,14 @@ router.get(
 router.post(
   '/services',
   asyncHandler(async (req, res) => {
-    const { name, description, price, durationMinutes, category, customCategoryName, staff } = req.body || {};
+    const { name, description, price, durationMinutes, category, customCategoryName, staff, isFree } = req.body || {};
+    const free = isFree === true;
     if (
       typeof name !== 'string' ||
       !name.trim() ||
       typeof category !== 'string' ||
       !category.trim() ||
-      typeof price !== 'number' ||
-      price <= 0 ||
+      (!free && (typeof price !== 'number' || price <= 0)) ||
       typeof durationMinutes !== 'number' ||
       durationMinutes <= 0
     ) {
@@ -752,7 +752,8 @@ router.post(
       business: req.businessId,
       name: name.trim(),
       description,
-      price,
+      price: free ? 0 : price,
+      isFree: free,
       durationMinutes,
       category: categorySlug,
       staff: staffIds,
@@ -764,9 +765,16 @@ router.post(
 router.patch(
   '/services/:id',
   asyncHandler(async (req, res) => {
-    const allowed = ['name', 'description', 'price', 'durationMinutes', 'category', 'staff'];
+    const allowed = ['name', 'description', 'price', 'durationMinutes', 'category', 'staff', 'isFree'];
     const update = {};
     for (const key of allowed) if (key in (req.body || {})) update[key] = req.body[key];
+
+    // isFree is the source of truth for price when set true — force price to 0 so the
+    // two fields can never disagree, regardless of what the client also sent.
+    if (update.isFree === true) update.price = 0;
+    if ('price' in update && (typeof update.price !== 'number' || update.price < 0)) {
+      return res.status(400).json({ error: 'INVALID_INPUT' });
+    }
 
     if ('durationMinutes' in update) {
       if (typeof update.durationMinutes !== 'number' || update.durationMinutes <= 0) {
@@ -826,7 +834,24 @@ router.post(
     const { name, role, bio } = req.body || {};
     if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'INVALID_INPUT' });
 
-    const staff = await Staff.create({ business: req.businessId, name: name.trim(), role, bio });
+    // New staff default to the business's own working hours so they're immediately
+    // bookable. Without this, a freshly added master has no schedule at all — every
+    // availability check finds zero slots, so the business silently disappears from
+    // the catalog (which only lists businesses with a real bookable slot) until the
+    // owner separately visits the "Schedule" tab, which isn't an obvious next step.
+    const businessHours = req.businessDoc.workingHours?.toObject?.() ?? req.businessDoc.workingHours;
+    const defaultSchedule = businessHours
+      ? Object.fromEntries(
+          Object.entries(businessHours)
+            .filter(([key]) => WEEKDAY_KEYS.has(key))
+            .map(([key, day]) => [
+              key,
+              { start: day.start, end: day.end, dayOff: !!day.dayOff, breakStart: day.breakStart, breakEnd: day.breakEnd },
+            ])
+        )
+      : undefined;
+
+    const staff = await Staff.create({ business: req.businessId, name: name.trim(), role, bio, schedule: defaultSchedule });
     res.status(201).json({ staff });
   })
 );

@@ -30,7 +30,7 @@ export default function AdminBusinessesPage() {
   const businesses = data?.businesses ?? [];
 
   return (
-    <RequireAdminRole roles={['SUPER_ADMIN', 'MODERATOR']}>
+    <RequireAdminRole roles={['SUPER_ADMIN', 'MODERATOR']} permission="businesses">
       <div className="flex flex-col gap-5">
         <div className="flex items-baseline justify-between">
           <h1 className="font-display text-2xl font-bold tracking-tight text-text">{t('admin.allBusinesses')}</h1>

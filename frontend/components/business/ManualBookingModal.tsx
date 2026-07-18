@@ -115,7 +115,7 @@ export function ManualBookingModal({
               </option>
               {services.map((s) => (
                 <option key={s._id} value={s._id}>
-                  {s.name} · {s.price}₴
+                  {s.name} · {s.isFree ? t('biz.free') : `${s.price}₴`}
                 </option>
               ))}
             </select>

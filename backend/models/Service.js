@@ -6,6 +6,9 @@ const serviceSchema = new mongoose.Schema(
     name: { type: String, required: true, trim: true },
     description: String,
     price: { type: Number, required: true },
+    // When true, price is forced to 0 server-side regardless of what was submitted —
+    // see routes/business.js's service create/update handlers.
+    isFree: { type: Boolean, default: false },
     durationMinutes: { type: Number, required: true },
     category: { type: String, required: true },
     photoUrl: String,

@@ -63,7 +63,7 @@ export default function AdminSupportPage() {
   }
 
   return (
-    <RequireAdminRole roles={['SUPER_ADMIN', 'MODERATOR']}>
+    <RequireAdminRole roles={['SUPER_ADMIN', 'MODERATOR']} permission="support">
       <div className="flex flex-col gap-5">
         <h1 className="font-display text-2xl font-bold text-text">{t('admin.support')}</h1>
 

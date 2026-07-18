@@ -57,7 +57,7 @@ export default function AdminBusinessDetailPage() {
   }
 
   return (
-    <RequireAdminRole roles={['SUPER_ADMIN', 'MODERATOR']}>
+    <RequireAdminRole roles={['SUPER_ADMIN', 'MODERATOR']} permission="businesses">
       <div className="flex max-w-2xl flex-col gap-5">
         <button
           onClick={() => router.push(`/${locale}/admin/businesses`)}

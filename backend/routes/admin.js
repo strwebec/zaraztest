@@ -13,6 +13,8 @@ const Invoice = require('../models/Invoice');
 const PlatformSettings = require('../models/PlatformSettings');
 const { requireAuth } = require('../middleware/auth');
 const { requireRole } = require('../middleware/role');
+const { requirePermission, hasAdminPermission } = require('../middleware/adminPermission');
+const { PERMISSION_BUCKETS } = require('../models/User');
 const { adminLimiter } = require('../middleware/rateLimit');
 const { asyncHandler } = require('../utils/asyncHandler');
 const { runDailyRatingUpdate } = require('../jobs/dailyRatingUpdate');
@@ -25,16 +27,15 @@ const AdminAuditLog = require('../models/AdminAuditLog');
 
 const router = express.Router();
 
-// Any of the three admin roles may enter the /admin API; individual routes
-// below narrow further down to the role(s) that should actually act on them.
-router.use(requireAuth, requireRole('SUPER_ADMIN', 'MODERATOR', 'FINANCE_ADMIN'), adminLimiter);
+// Any admin-family role may enter the /admin API; individual routes below
+// narrow further down to whichever specific permission bucket they act on
+// (requirePermission), which is what actually decides ADMIN-role access.
+router.use(requireAuth, requireRole('SUPER_ADMIN', 'MODERATOR', 'FINANCE_ADMIN', 'ADMIN'), adminLimiter);
 
 const onlySuperAdmin = requireRole('SUPER_ADMIN');
-const moderation = requireRole('SUPER_ADMIN', 'MODERATOR');
-const finance = requireRole('SUPER_ADMIN', 'FINANCE_ADMIN');
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const INVITABLE_ROLES = ['MODERATOR', 'FINANCE_ADMIN'];
+const INVITABLE_ROLES = ['MODERATOR', 'FINANCE_ADMIN', 'ADMIN'];
 
 router.get(
   '/overview',
@@ -147,7 +148,7 @@ router.get(
 
 router.get(
   '/businesses',
-  moderation,
+  requirePermission('businesses'),
   asyncHandler(async (req, res) => {
     const { status } = req.query;
     const filter = {};
@@ -164,7 +165,7 @@ router.get(
 
 router.get(
   '/businesses/:id',
-  moderation,
+  requirePermission('businesses'),
   asyncHandler(async (req, res) => {
     const business = await Business.findById(req.params.id)
       .populate('owner', 'name email phone')
@@ -196,7 +197,7 @@ router.get(
 
 router.post(
   '/businesses/:id/approve',
-  moderation,
+  requirePermission('businesses'),
   asyncHandler(async (req, res) => {
     const business = await Business.findByIdAndUpdate(
       req.params.id,
@@ -211,7 +212,7 @@ router.post(
 
 router.post(
   '/businesses/:id/reject',
-  moderation,
+  requirePermission('businesses'),
   asyncHandler(async (req, res) => {
     const { reason } = req.body || {};
     const business = await Business.findByIdAndUpdate(
@@ -227,7 +228,7 @@ router.post(
 
 router.post(
   '/businesses/:id/block',
-  moderation,
+  requirePermission('businesses'),
   asyncHandler(async (req, res) => {
     const { reason, durationDays } = req.body || {};
     const days = Number(durationDays);
@@ -260,7 +261,7 @@ router.post(
 
 router.post(
   '/businesses/:id/unblock',
-  moderation,
+  requirePermission('businesses'),
   asyncHandler(async (req, res) => {
     const business = await Business.findByIdAndUpdate(
       req.params.id,
@@ -306,7 +307,7 @@ router.delete(
 
 router.get(
   '/reviews',
-  moderation,
+  requirePermission('reviews'),
   asyncHandler(async (req, res) => {
     const { status, flaggedReplies } = req.query;
     const filter = {};
@@ -327,7 +328,7 @@ router.get(
 
 router.post(
   '/reviews/:id/approve',
-  moderation,
+  requirePermission('reviews'),
   asyncHandler(async (req, res) => {
     const review = await Review.findByIdAndUpdate(req.params.id, { status: 'PUBLISHED' }, { new: true });
     if (!review) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -338,7 +339,7 @@ router.post(
 
 router.post(
   '/reviews/:id/reject',
-  moderation,
+  requirePermission('reviews'),
   asyncHandler(async (req, res) => {
     const review = await Review.findByIdAndUpdate(req.params.id, { status: 'REJECTED' }, { new: true });
     if (!review) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -349,7 +350,7 @@ router.post(
 
 router.post(
   '/reviews/:id/clear-reply-flag',
-  moderation,
+  requirePermission('reviews'),
   asyncHandler(async (req, res) => {
     const review = await Review.findByIdAndUpdate(req.params.id, { replyFlagged: false }, { new: true });
     if (!review) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -359,7 +360,7 @@ router.post(
 
 router.post(
   '/reviews/:id/remove-reply',
-  moderation,
+  requirePermission('reviews'),
   asyncHandler(async (req, res) => {
     const review = await Review.findByIdAndUpdate(
       req.params.id,
@@ -373,7 +374,7 @@ router.post(
 
 router.get(
   '/top-placements',
-  moderation,
+  requirePermission('topPlacements'),
   asyncHandler(async (req, res) => {
     const { status, business } = req.query;
     const filter = {};
@@ -396,7 +397,7 @@ router.get(
 
 router.post(
   '/top-placements/:id/confirm',
-  moderation,
+  requirePermission('topPlacements'),
   asyncHandler(async (req, res) => {
     // Admin can fast-track activation once the business has confirmed payment
     // (AWAITING_ACTIVATION), instead of waiting for the 15-minute auto-activation timer.
@@ -420,7 +421,7 @@ router.post(
 
 router.post(
   '/top-placements/:id/reject',
-  moderation,
+  requirePermission('topPlacements'),
   asyncHandler(async (req, res) => {
     const { reason } = req.body || {};
     const placement = await TopPlacement.findOneAndUpdate(
@@ -436,7 +437,7 @@ router.post(
 
 router.get(
   '/settings/requisites',
-  finance,
+  requirePermission('finance'),
   asyncHandler(async (req, res) => {
     const settings = await PlatformSettings.getOrCreate();
     res.json({
@@ -448,7 +449,7 @@ router.get(
 
 router.patch(
   '/settings/requisites',
-  finance,
+  requirePermission('finance'),
   asyncHandler(async (req, res) => {
     const { commissionRequisites, topPlacementRequisites } = req.body || {};
     const update = { updatedBy: req.userId };
@@ -467,7 +468,7 @@ router.patch(
 
 router.get(
   '/finance/overview',
-  finance,
+  requirePermission('finance'),
   asyncHandler(async (req, res) => {
     const monthStart = new Date();
     monthStart.setDate(1);
@@ -504,16 +505,16 @@ router.get(
 router.get(
   '/pending-counts',
   asyncHandler(async (req, res) => {
-    // Mirrors the role boundaries on the underlying list endpoints below
-    // (moderation for businesses/top-placements, finance for invoices) — a
-    // FINANCE_ADMIN can't list pending businesses and shouldn't learn even the
-    // count of them, and likewise a MODERATOR shouldn't learn the invoice count.
-    const canModerate = req.userRole === 'SUPER_ADMIN' || req.userRole === 'MODERATOR';
-    const canFinance = req.userRole === 'SUPER_ADMIN' || req.userRole === 'FINANCE_ADMIN';
+    // Mirrors the permission boundaries on the underlying list endpoints below —
+    // a user without the 'businesses'/'topPlacements'/'finance' bucket shouldn't
+    // learn even the count of items in that queue.
+    const canBusinesses = hasAdminPermission(req.userRole, req.userPermissions, 'businesses');
+    const canTopPlacements = hasAdminPermission(req.userRole, req.userPermissions, 'topPlacements');
+    const canFinance = hasAdminPermission(req.userRole, req.userPermissions, 'finance');
 
     const [pendingBusinesses, pendingTopPlacements, pendingInvoices] = await Promise.all([
-      canModerate ? Business.countDocuments({ status: 'PENDING' }) : Promise.resolve(0),
-      canModerate ? TopPlacement.countDocuments({ status: 'AWAITING_ACTIVATION' }) : Promise.resolve(0),
+      canBusinesses ? Business.countDocuments({ status: 'PENDING' }) : Promise.resolve(0),
+      canTopPlacements ? TopPlacement.countDocuments({ status: 'AWAITING_ACTIVATION' }) : Promise.resolve(0),
       canFinance ? Invoice.countDocuments({ status: 'AWAITING_VERIFICATION' }) : Promise.resolve(0),
     ]);
     res.json({ pendingBusinesses, pendingTopPlacements, pendingInvoices });
@@ -522,7 +523,7 @@ router.get(
 
 router.get(
   '/invoices',
-  finance,
+  requirePermission('finance'),
   asyncHandler(async (req, res) => {
     const { status, business } = req.query;
     const filter = {};
@@ -542,7 +543,7 @@ router.get(
 
 router.post(
   '/invoices/:id/mark-paid',
-  finance,
+  requirePermission('finance'),
   asyncHandler(async (req, res) => {
     const invoice = await Invoice.findById(req.params.id);
     if (!invoice) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -575,7 +576,7 @@ router.post(
 // consent/privacy policy on submitting falsified payment proof.
 router.post(
   '/invoices/:id/reject-receipt',
-  finance,
+  requirePermission('finance'),
   asyncHandler(async (req, res) => {
     const { reason } = req.body || {};
     const invoice = await Invoice.findOne({ _id: req.params.id, status: 'AWAITING_VERIFICATION' });
@@ -600,7 +601,7 @@ router.post(
 
 router.get(
   '/categories',
-  moderation,
+  requirePermission('categories'),
   asyncHandler(async (req, res) => {
     const { status } = req.query;
     const filter = {};
@@ -617,7 +618,7 @@ router.get(
 
 router.post(
   '/categories/:id/approve',
-  moderation,
+  requirePermission('categories'),
   asyncHandler(async (req, res) => {
     const category = await Category.findOneAndUpdate(
       { _id: req.params.id, status: 'PENDING' },
@@ -632,7 +633,7 @@ router.post(
 
 router.post(
   '/categories/:id/reject',
-  moderation,
+  requirePermission('categories'),
   asyncHandler(async (req, res) => {
     const category = await Category.findOneAndUpdate(
       { _id: req.params.id, status: 'PENDING' },
@@ -647,7 +648,7 @@ router.post(
 
 router.get(
   '/users',
-  moderation,
+  requirePermission('users'),
   asyncHandler(async (req, res) => {
     const { role, q } = req.query;
     const filter = { role: { $in: ['CLIENT', 'BUSINESS_OWNER'] } };
@@ -670,7 +671,7 @@ const FAR_FUTURE = new Date('2999-01-01');
 
 router.post(
   '/users/:id/block',
-  moderation,
+  requirePermission('users'),
   asyncHandler(async (req, res) => {
     const { reason, durationDays } = req.body || {};
     const days = Number(durationDays);
@@ -701,7 +702,7 @@ router.post(
 
 router.post(
   '/users/:id/unblock',
-  moderation,
+  requirePermission('users'),
   asyncHandler(async (req, res) => {
     const user = await User.findOneAndUpdate(
       { _id: req.params.id, role: { $in: ['CLIENT', 'BUSINESS_OWNER'] } },
@@ -739,8 +740,8 @@ router.get(
   '/team',
   onlySuperAdmin,
   asyncHandler(async (_req, res) => {
-    const team = await User.find({ role: { $in: ['SUPER_ADMIN', 'MODERATOR', 'FINANCE_ADMIN'] } })
-      .select('name email role createdAt')
+    const team = await User.find({ role: { $in: ['SUPER_ADMIN', 'MODERATOR', 'FINANCE_ADMIN', 'ADMIN'] } })
+      .select('name email role permissions createdAt')
       .sort({ createdAt: 1 })
       .lean();
     res.json({ team });
@@ -751,7 +752,7 @@ router.post(
   '/team',
   onlySuperAdmin,
   asyncHandler(async (req, res) => {
-    const { name, email, password, role } = req.body || {};
+    const { name, email, password, role, permissions } = req.body || {};
     if (
       typeof name !== 'string' ||
       !name.trim() ||
@@ -761,6 +762,18 @@ router.post(
       !INVITABLE_ROLES.includes(role)
     ) {
       return res.status(400).json({ error: 'INVALID_INPUT' });
+    }
+
+    let grantedPermissions;
+    if (role === 'ADMIN') {
+      if (
+        !Array.isArray(permissions) ||
+        permissions.length === 0 ||
+        !permissions.every((p) => PERMISSION_BUCKETS.includes(p))
+      ) {
+        return res.status(400).json({ error: 'INVALID_PERMISSIONS' });
+      }
+      grantedPermissions = [...new Set(permissions)];
     }
 
     const existing = await User.findOne({ email: email.toLowerCase() });
@@ -773,12 +786,20 @@ router.post(
       email: email.toLowerCase(),
       passwordHash,
       emailVerified: true,
+      ...(grantedPermissions ? { permissions: grantedPermissions } : {}),
     });
 
-    await logAdminAction(req, { action: 'team.invite', targetType: 'User', targetId: member._id, targetLabel: `${member.name} (${member.email})`, meta: { role } });
+    await logAdminAction(req, { action: 'team.invite', targetType: 'User', targetId: member._id, targetLabel: `${member.name} (${member.email})`, meta: { role, permissions: grantedPermissions } });
 
     res.status(201).json({
-      member: { id: member._id, name: member.name, email: member.email, role: member.role, createdAt: member.createdAt },
+      member: {
+        id: member._id,
+        name: member.name,
+        email: member.email,
+        role: member.role,
+        permissions: member.permissions,
+        createdAt: member.createdAt,
+      },
     });
   })
 );

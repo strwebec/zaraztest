@@ -13,6 +13,7 @@ const bookingSchema = new mongoose.Schema(
     startTime: { type: String, required: true }, // HH:mm
     durationMinutes: { type: Number, required: true },
     price: { type: Number, required: true }, // snapshot of service price at booking time
+    isFree: { type: Boolean, default: false }, // snapshot of service.isFree at booking time
 
     source: { type: String, enum: ['platform', 'manual'], default: 'platform' },
     status: {

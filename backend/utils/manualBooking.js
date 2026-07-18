@@ -41,6 +41,7 @@ async function createManualBooking({
             startTime,
             durationMinutes: service.durationMinutes,
             price: service.price,
+            isFree: !!service.isFree,
             source: 'manual',
             status: 'confirmed',
             comment,
