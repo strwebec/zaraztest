@@ -155,6 +155,11 @@
     "supportHint": "Питання чи проблема? Напишіть нам"
   },
   "biz": {
+    "pendingReviewTitle": "Ваш бізнес на розгляді",
+    "pendingReviewHint": "«{{name}}» подано на перевірку супер-адміном. Зазвичай це займає до 15 хвилин.",
+    "pendingReviewCountdownLabel": "орієнтовний час очікування",
+    "pendingReviewOverdue": "Вибачте, перевірка займає більше часу, ніж зазвичай. Якщо є питання — зверніться у підтримку.",
+    "pendingReviewContactSupport": "Написати в підтримку",
     "dashboard": "Дашборд",
     "settings": "Налаштування",
     "supportLink": "Підтримка",

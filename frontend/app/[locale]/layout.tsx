@@ -1,5 +1,6 @@
 import { Providers } from '@/lib/providers';
 import { Header } from '@/components/shared/Header';
+import { GlobalMobileBottomNav } from '@/components/shared/GlobalMobileBottomNav';
 import { SUPPORTED_LOCALES, type Locale } from '@/lib/i18n/locales';
 import { DEFAULT_CITY_NAME } from '@/lib/utils/city';
 import { notFound } from 'next/navigation';
@@ -21,7 +22,8 @@ export default function LocaleLayout({
   return (
     <Providers locale={locale}>
       <Header locale={locale} city={DEFAULT_CITY_NAME} />
-      <main className="min-h-screen bg-bg">{children}</main>
+      <main className="min-h-screen bg-bg pb-bottom-nav-safe">{children}</main>
+      <GlobalMobileBottomNav />
     </Providers>
   );
 }

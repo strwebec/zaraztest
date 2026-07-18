@@ -370,8 +370,8 @@ export function useClientStats() {
   return useQuery({ queryKey: ['client-stats'], queryFn: fetchClientStats });
 }
 
-export function useBusinessMe() {
-  return useQuery({ queryKey: ['business-me'], queryFn: fetchBusinessMe });
+export function useBusinessMe(options?: { refetchInterval?: number | false | ((query: { state: { data?: { business?: { status?: string } } } }) => number | false) }) {
+  return useQuery({ queryKey: ['business-me'], queryFn: fetchBusinessMe, ...options });
 }
 
 export function useUpdateBusinessMe() {

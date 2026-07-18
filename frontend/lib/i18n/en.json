@@ -155,6 +155,11 @@
     "supportHint": "Question or issue? Message us"
   },
   "biz": {
+    "pendingReviewTitle": "Your business is under review",
+    "pendingReviewHint": "\"{{name}}\" has been submitted for super-admin review. This usually takes up to 15 minutes.",
+    "pendingReviewCountdownLabel": "estimated wait time",
+    "pendingReviewOverdue": "Sorry, the review is taking longer than usual. If you have questions, contact support.",
+    "pendingReviewContactSupport": "Contact support",
     "dashboard": "Dashboard",
     "settings": "Settings",
     "supportLink": "Support",

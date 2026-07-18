@@ -6,7 +6,8 @@ import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { LayoutDashboard, CalendarRange, Scissors, Users, Star, Receipt, BarChart3, Settings, Bell, LifeBuoy, LogOut, Contact, Wallet } from 'lucide-react';
 import { ClientSidebar } from '@/components/client/ClientSidebar';
-import { useMe, useLogout, useBusinessNotifications, useBusinessInvoices } from '@/lib/hooks';
+import { PendingReviewScreen } from '@/components/business/PendingReviewScreen';
+import { useMe, useLogout, useBusinessMe, useBusinessNotifications, useBusinessInvoices } from '@/lib/hooks';
 import type { Locale } from '@/lib/i18n';
 
 export default function BusinessAccountLayout({ children }: { children: React.ReactNode }) {
@@ -16,6 +17,10 @@ export default function BusinessAccountLayout({ children }: { children: React.Re
   const { locale } = useParams<{ locale: Locale }>();
   const { data, isLoading, isError } = useMe();
   const logoutMutation = useLogout();
+  const isBusinessOwner = !!data?.user && data.user.role === 'BUSINESS_OWNER';
+  const { data: businessData } = useBusinessMe({
+    refetchInterval: (query) => (query.state.data?.business?.status === 'PENDING' && isBusinessOwner ? 20000 : false),
+  });
   const { data: notificationsData } = useBusinessNotifications();
   const unreadCount = (notificationsData?.notifications ?? []).filter((n) => !n.read).length;
   const { data: invoicesData } = useBusinessInvoices();
@@ -49,6 +54,11 @@ export default function BusinessAccountLayout({ children }: { children: React.Re
   ];
 
   if (isLoading || !data?.user || data.user.role !== 'BUSINESS_OWNER') return null;
+
+  if (!businessData) return null;
+  if (businessData.business.status === 'PENDING') {
+    return <PendingReviewScreen businessName={businessData.business.name} createdAt={businessData.business.createdAt ?? new Date().toISOString()} />;
+  }
 
   return (
     <div className="mx-auto flex w-full max-w-[1300px] flex-col lg:flex-row">
