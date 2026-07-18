@@ -33,6 +33,15 @@ export const viewport: Viewport = {
   themeColor: '#5e56a8',
 };
 
+// middleware.ts stamps a fresh CSP nonce on every request for Next's inline
+// hydration scripts. Next's static Full Route Cache reuses one prerendered
+// HTML response (with whatever nonce was baked in at render time) for every
+// later request regardless of that header, so a cached page's scripts stop
+// matching the nonce in the CSP it's served with and the browser blocks all
+// of them. Forcing dynamic rendering keeps every response's nonce in sync
+// with its own CSP header.
+export const dynamic = 'force-dynamic';
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="uk">

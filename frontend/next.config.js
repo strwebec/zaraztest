@@ -16,7 +16,16 @@ const nextConfig = {
   productionBrowserSourceMaps: false,
   async headers() {
     return [
-      { source: '/:path*', headers: SECURITY_HEADERS },
+      {
+        // The CSP nonce is regenerated per-request in middleware.ts, so a cached
+        // HTML document — whose inline scripts were stamped with an earlier
+        // request's nonce — no longer matches the fresh CSP header on a later
+        // response, and the browser blocks every script on the page. Prevent any
+        // CDN/proxy from serving a stale copy; this only affects HTML documents,
+        // not the content-hashed, natively-immutable /_next/static assets.
+        source: '/:path*',
+        headers: [...SECURITY_HEADERS, { key: 'Cache-Control', value: 'no-store' }],
+      },
       {
         source: '/api/:path*',
         headers: [...SECURITY_HEADERS, { key: 'Cache-Control', value: 'no-store' }],
