@@ -22,7 +22,7 @@ export function ReviewsSection({ businessId }: { businessId: string }) {
               <span className="text-sm font-bold text-text">{r.client.name}</span>
               <StarRating value={r.rating} size="sm" />
             </div>
-            <p className="text-sm text-text-muted">{r.text}</p>
+            {r.text && <p className="text-sm text-text-muted">{r.text}</p>}
             {r.reply?.text && (
               <div className="ml-4 flex flex-col gap-1 rounded-xl bg-bg p-3">
                 <span className="text-xs font-bold text-text">{t('business.reply')}</span>

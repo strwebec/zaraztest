@@ -4,7 +4,13 @@ const Review = require('../models/Review');
 
 async function recomputeBusinessReviewStats(businessId) {
   const stats = await Review.aggregate([
-    { $match: { business: new mongoose.Types.ObjectId(businessId), status: 'PUBLISHED' } },
+    {
+      $match: {
+        business: new mongoose.Types.ObjectId(businessId),
+        status: 'PUBLISHED',
+        'dispute.status': { $ne: 'OPEN' },
+      },
+    },
     { $group: { _id: null, avgRating: { $avg: '$rating' }, count: { $sum: 1 } } },
   ]);
 

@@ -38,13 +38,38 @@ async function createBusinessSheet(business, ownerEmail) {
     requestBody: { values: [HEADER] },
   });
 
+  // Sharing can fail even though the sheet itself was created fine — most commonly a
+  // Workspace org policy blocking sharing to a specific external address. That must
+  // not be fatal to the whole flow: readSheetRows/writeSheetRows below always use the
+  // service account's own credentials, not the owner's, so the sheet is fully usable
+  // for backup sync either way — only the owner's own view/edit access is at risk.
+  // Without this try/catch, a permission failure here used to throw out of
+  // createBusinessSheet entirely, so business.backupSheetId never got saved and every
+  // 5-minute sync recreated a brand-new sheet from scratch forever, never actually
+  // adopting one — which is why the backup table could get permanently stuck at
+  // "not created yet" even though sheets were silently being created the whole time.
   if (ownerEmail) {
     const drive = google.drive({ version: 'v3', auth });
-    await drive.permissions.create({
-      fileId: spreadsheetId,
-      requestBody: { role: 'writer', type: 'user', emailAddress: ownerEmail },
-      sendNotificationEmail: false,
-    });
+    try {
+      await drive.permissions.create({
+        fileId: spreadsheetId,
+        requestBody: { role: 'writer', type: 'user', emailAddress: ownerEmail },
+        sendNotificationEmail: false,
+      });
+    } catch (err) {
+      console.error(`[googleSheets] could not share sheet ${spreadsheetId} with ${ownerEmail}:`, err.message);
+      // Fall back to link-sharing so the owner can still reach it via backupSheetUrl
+      // even without an explicit per-user grant, in case only targeted external
+      // sharing (not general link-sharing) is restricted by the org's Drive policy.
+      try {
+        await drive.permissions.create({
+          fileId: spreadsheetId,
+          requestBody: { role: 'writer', type: 'anyone' },
+        });
+      } catch (linkErr) {
+        console.error(`[googleSheets] link-sharing fallback also failed for ${spreadsheetId}:`, linkErr.message);
+      }
+    }
   }
 
   return {

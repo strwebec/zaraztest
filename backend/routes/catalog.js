@@ -9,6 +9,7 @@ const Review = require('../models/Review');
 const User = require('../models/User');
 const Category = require('../models/Category');
 const { computeFreeSlots } = require('../utils/availability');
+const { getOrCreateVirtualStaff } = require('../utils/virtualStaff');
 const { asyncHandler } = require('../utils/asyncHandler');
 const { optionalAuth } = require('../middleware/auth');
 const { catalogLimiter } = require('../middleware/rateLimit');
@@ -102,7 +103,8 @@ router.get(
         let nextSlot = null;
 
         if (cheapest) {
-          const staffList = await Staff.find({ business: biz._id, active: true }).lean();
+          let staffList = await Staff.find({ business: biz._id, active: true, virtual: { $ne: true } }).lean();
+          if (!staffList.length) staffList = [(await getOrCreateVirtualStaff(biz)).toObject()];
           for (const staff of staffList) {
             const slots = await computeFreeSlots({
               staff,
@@ -168,7 +170,7 @@ router.get(
 
     const [services, staff] = await Promise.all([
       Service.find({ business: biz._id, active: true }).lean(),
-      Staff.find({ business: biz._id, active: true }).lean(),
+      Staff.find({ business: biz._id, active: true, virtual: { $ne: true } }).lean(),
       recordProfileView(req, biz),
     ]);
 
@@ -196,7 +198,11 @@ async function recordProfileView(req, biz) {
 router.get(
   '/businesses/:id/reviews',
   asyncHandler(async (req, res) => {
-    const reviews = await Review.find({ business: req.params.id, status: 'PUBLISHED' })
+    const reviews = await Review.find({
+      business: req.params.id,
+      status: 'PUBLISHED',
+      'dispute.status': { $ne: 'OPEN' },
+    })
       .populate('client', 'name')
       .sort({ createdAt: -1 })
       .lean();
@@ -215,10 +221,14 @@ router.get(
     const service = await Service.findOne({ _id: serviceId, business: req.params.id, active: true }).lean();
     if (!service) return res.status(404).json({ error: 'NOT_FOUND' });
 
+    const business = await Business.findById(req.params.id).lean();
+    if (!business) return res.status(404).json({ error: 'NOT_FOUND' });
+
     const staffIds = service.staff?.length ? service.staff : null;
-    const staffFilter = { business: req.params.id, active: true };
+    const staffFilter = { business: req.params.id, active: true, virtual: { $ne: true } };
     if (staffIds) staffFilter._id = { $in: staffIds };
-    const staffList = await Staff.find(staffFilter).lean();
+    let staffList = await Staff.find(staffFilter).lean();
+    if (!staffList.length && !staffIds) staffList = [(await getOrCreateVirtualStaff(business)).toObject()];
 
     const slotToStaff = new Map();
     for (const staff of staffList) {
@@ -261,6 +271,9 @@ router.get(
     const serviceById = new Map(services.map((s) => [String(s._id), s]));
     const totalDuration = serviceIds.reduce((sum, id) => sum + serviceById.get(id).durationMinutes, 0);
 
+    const business = await Business.findById(req.params.id).lean();
+    if (!business) return res.status(404).json({ error: 'NOT_FOUND' });
+
     // A service with an empty staff list means "any active staff can do it" — only
     // intersect down for services that actually restrict who can perform them.
     let eligibleStaffIds = null;
@@ -270,9 +283,10 @@ router.get(
       eligibleStaffIds = eligibleStaffIds ? eligibleStaffIds.filter((id) => set.has(id)) : s.staff.map(String);
     }
 
-    const staffFilter = { business: req.params.id, active: true };
+    const staffFilter = { business: req.params.id, active: true, virtual: { $ne: true } };
     if (eligibleStaffIds) staffFilter._id = { $in: eligibleStaffIds };
-    const staffList = await Staff.find(staffFilter).lean();
+    let staffList = await Staff.find(staffFilter).lean();
+    if (!staffList.length && !eligibleStaffIds) staffList = [(await getOrCreateVirtualStaff(business)).toObject()];
 
     const slotToStaff = new Map();
     for (const staff of staffList) {

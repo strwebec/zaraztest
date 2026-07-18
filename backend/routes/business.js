@@ -19,6 +19,7 @@ const { getWeekRange } = require('../utils/weekRange');
 const { applyClientViolation } = require('../utils/clientPenalty');
 const { containsStopWords } = require('../utils/stopWords');
 const { applyPhoneReveal } = require('../utils/phoneReveal');
+const { recomputeBusinessReviewStats } = require('../utils/reviewStats');
 const Business = require('../models/Business');
 const Category = require('../models/Category');
 const PlatformSettings = require('../models/PlatformSettings');
@@ -27,6 +28,7 @@ const { imageUploader, pdfUploader, finalizeUpload, verifyImageSignature, verify
 
 const staffPhotoUpload = imageUploader('staff');
 const businessPhotoUpload = imageUploader('business');
+const servicePhotoUpload = imageUploader('service');
 const receiptUpload = pdfUploader('receipts');
 
 const router = express.Router();
@@ -103,6 +105,10 @@ router.patch(
       { workingHours },
       { new: true }
     );
+    // Keep the zero-staff fallback (see utils/virtualStaff.js) in sync with the
+    // business's real hours, if one already exists — a no-op for businesses that have
+    // added real staff and never needed it.
+    await Staff.updateOne({ business: req.businessId, virtual: true }, { schedule: workingHours });
     res.json({ business });
   })
 );
@@ -201,7 +207,9 @@ router.get(
     const since = new Date(Date.now() - (rangeDays - 1) * 24 * 60 * 60 * 1000);
     const sinceKey = since.toISOString().slice(0, 10);
 
-    const allStaff = await Staff.find({ business: req.businessId, active: true }).select('name photoUrl').lean();
+    const allStaff = await Staff.find({ business: req.businessId, active: true, virtual: { $ne: true } })
+      .select('name photoUrl')
+      .lean();
 
     const rangeBookings = await Booking.find({
       business: req.businessId,
@@ -658,6 +666,39 @@ router.post(
   })
 );
 
+router.post(
+  '/reviews/:id/dispute',
+  asyncHandler(async (req, res) => {
+    const { reason } = req.body || {};
+    if (typeof reason !== 'string' || !reason.trim() || reason.trim().length > 1000) {
+      return res.status(400).json({ error: 'INVALID_INPUT' });
+    }
+
+    const review = await Review.findOne({ _id: req.params.id, business: req.businessId, status: 'PUBLISHED' });
+    if (!review) return res.status(404).json({ error: 'NOT_FOUND' });
+    if (review.dispute?.status === 'OPEN') return res.status(409).json({ error: 'DISPUTE_ALREADY_OPEN' });
+
+    review.dispute = { status: 'OPEN', reason: reason.trim(), openedAt: new Date() };
+    await review.save();
+
+    // Excluded from the public listing and rating the moment the dispute opens (see
+    // utils/reviewStats.js) — resolves back to counted if the super-admin dismisses it.
+    await recomputeBusinessReviewStats(req.businessId);
+
+    if (review.client) {
+      await Notification.create({
+        user: review.client,
+        type: 'review_disputed',
+        title: 'Ваш відгук оскаржено',
+        text: `${req.businessDoc.name} оскаржив ваш відгук. Ви можете надати пояснення — його розгляне адміністрація.`,
+        relatedReview: review._id,
+      });
+    }
+
+    res.json({ review });
+  })
+);
+
 router.get(
   '/top-placement',
   asyncHandler(async (req, res) => {
@@ -882,10 +923,42 @@ router.delete(
   })
 );
 
+router.post(
+  '/services/:id/photo',
+  servicePhotoUpload.single('photo'),
+  verifyImageSignature,
+  finalizeUpload('service'),
+  asyncHandler(async (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'INVALID_FILE' });
+    const service = await Service.findOneAndUpdate(
+      { _id: req.params.id, business: req.businessId },
+      { photoUrl: req.file.publicUrl },
+      { new: true }
+    );
+    if (!service) return res.status(404).json({ error: 'NOT_FOUND' });
+    res.json({ service });
+  })
+);
+
+router.delete(
+  '/services/:id/photo',
+  asyncHandler(async (req, res) => {
+    const service = await Service.findOneAndUpdate(
+      { _id: req.params.id, business: req.businessId },
+      { $unset: { photoUrl: '' } },
+      { new: true }
+    );
+    if (!service) return res.status(404).json({ error: 'NOT_FOUND' });
+    res.json({ service });
+  })
+);
+
 router.get(
   '/staff',
   asyncHandler(async (req, res) => {
-    const staff = await Staff.find({ business: req.businessId, active: true }).sort({ createdAt: 1 }).lean();
+    const staff = await Staff.find({ business: req.businessId, active: true, virtual: { $ne: true } })
+      .sort({ createdAt: 1 })
+      .lean();
     res.json({ staff });
   })
 );

@@ -5,9 +5,9 @@ import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { StarRating } from '@/components/shared/StarRating';
 
-// Mirrors the backend's minimum in routes/client.js's POST /bookings/:id/review —
-// a review shorter than this is rejected with INVALID_INPUT, so this must match.
-const MIN_REVIEW_LENGTH = 20;
+// Mirrors the backend's cap in routes/client.js's POST /bookings/:id/review — text
+// is optional (rating alone is enough), but still can't exceed this length.
+const MAX_REVIEW_LENGTH = 1000;
 
 export function ReviewModal({
   businessName,
@@ -26,7 +26,7 @@ export function ReviewModal({
   const [rating, setRating] = useState(5);
   const [text, setText] = useState('');
   const trimmedLength = text.trim().length;
-  const tooShort = trimmedLength > 0 && trimmedLength < MIN_REVIEW_LENGTH;
+  const tooLong = trimmedLength > MAX_REVIEW_LENGTH;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center" onClick={onClose}>
@@ -48,18 +48,18 @@ export function ReviewModal({
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
-          placeholder={t('client.reviewPlaceholder') as string}
+          placeholder={t('client.reviewPlaceholderOptional') as string}
           rows={4}
           className="resize-none rounded-xl border border-border bg-bg px-4 py-3 text-sm text-text outline-none focus:border-primary"
         />
-        <p className={`text-xs ${tooShort ? 'text-danger' : 'text-text-muted'}`}>
-          {t('client.reviewMinLength', { count: MIN_REVIEW_LENGTH, current: trimmedLength })}
-        </p>
+        {tooLong && (
+          <p className="text-xs text-danger">{t('client.reviewMaxLength', { count: MAX_REVIEW_LENGTH })}</p>
+        )}
 
         {error && <p className="text-sm text-danger">{error}</p>}
 
         <button
-          disabled={isPending || trimmedLength < MIN_REVIEW_LENGTH}
+          disabled={isPending || tooLong}
           onClick={() => onSubmit(rating, text.trim())}
           className="rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white transition disabled:opacity-50"
         >

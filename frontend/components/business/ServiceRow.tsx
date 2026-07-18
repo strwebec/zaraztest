@@ -35,6 +35,14 @@ export function ServiceRow({
         >
           <Check size={13} strokeWidth={3} />
         </span>
+        {service.photoUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={service.photoUrl}
+            alt={service.name}
+            className="h-12 w-12 flex-none rounded-lg object-cover sm:h-14 sm:w-14"
+          />
+        )}
         <div>
           <div className="text-sm font-semibold text-text sm:text-[15px]">{service.name}</div>
           <div className="mt-0.5 text-xs text-text-muted sm:text-[12.5px]">{service.durationMinutes} хв</div>

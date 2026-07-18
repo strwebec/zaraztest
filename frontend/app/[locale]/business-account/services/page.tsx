@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ImagePlus, X } from 'lucide-react';
 import { Skeleton } from '@/components/ui/Skeleton';
 import {
   useBusinessServices,
@@ -11,8 +12,59 @@ import {
   useBusinessStaff,
   useCategories,
   useBusinessMe,
+  useUploadServicePhoto,
+  useDeleteServicePhoto,
 } from '@/lib/hooks';
 import { ApiError, maxWorkingDayMinutes, type Service, type Staff } from '@/lib/utils/api';
+
+function ServicePhoto({ service }: { service: Service }) {
+  const { t } = useTranslation();
+  const uploadPhoto = useUploadServicePhoto();
+  const deletePhoto = useDeleteServicePhoto();
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => fileRef.current?.click()}
+        disabled={uploadPhoto.isPending}
+        className="relative h-14 w-14 shrink-0 overflow-hidden rounded-xl border border-border bg-bg text-text-muted transition hover:border-primary"
+        title={t('biz.servicePhoto') as string}
+      >
+        {service.photoUrl ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={service.photoUrl} alt={service.name} className="h-full w-full object-cover" />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center">
+            <ImagePlus size={18} />
+          </span>
+        )}
+      </button>
+      {service.photoUrl && (
+        <button
+          type="button"
+          onClick={() => deletePhoto.mutate(service._id)}
+          disabled={deletePhoto.isPending}
+          className="text-text-muted transition hover:text-danger"
+        >
+          <X size={13} />
+        </button>
+      )}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) uploadPhoto.mutate({ id: service._id, file });
+          e.target.value = '';
+        }}
+      />
+    </div>
+  );
+}
 
 function StaffPicker({
   staffList,
@@ -187,8 +239,13 @@ export default function BusinessServicesPage() {
   const services = data?.services ?? [];
 
   useEffect(() => {
-    if (!category && categories.length) setCategory(categories[0].id);
-  }, [categories, category]);
+    if (category || !categories.length) return;
+    // Default to the business's own registered category (most new services match
+    // it) rather than always the first one alphabetically — still fully editable.
+    const ownCategoryId = businessMeData?.business?.category;
+    const ownCategoryExists = ownCategoryId && categories.some((c) => c.id === ownCategoryId);
+    setCategory(ownCategoryExists ? ownCategoryId : categories[0].id);
+  }, [categories, category, businessMeData]);
 
   function toggleNewStaff(id: string) {
     setStaffIds((prev) => (prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id]));
@@ -333,13 +390,16 @@ export default function BusinessServicesPage() {
           services.map((svc) => (
             <div key={svc._id} className="border-b border-border py-4">
               <div className="flex items-center justify-between">
-                <div>
-                  <div className="text-sm font-semibold text-text">{svc.name}</div>
-                  <div className="mt-0.5 text-xs text-text-muted">{svc.durationMinutes} хв</div>
-                  {svc.description && <p className="mt-1 max-w-md text-xs text-text-muted">{svc.description}</p>}
-                  {svc.staff && svc.staff.length > 0 && (
-                    <p className="mt-1 text-xs text-primary">{t('biz.assignedStaffList', { names: staffNames(svc.staff) })}</p>
-                  )}
+                <div className="flex items-center gap-3">
+                  <ServicePhoto service={svc} />
+                  <div>
+                    <div className="text-sm font-semibold text-text">{svc.name}</div>
+                    <div className="mt-0.5 text-xs text-text-muted">{svc.durationMinutes} хв</div>
+                    {svc.description && <p className="mt-1 max-w-md text-xs text-text-muted">{svc.description}</p>}
+                    {svc.staff && svc.staff.length > 0 && (
+                      <p className="mt-1 text-xs text-primary">{t('biz.assignedStaffList', { names: staffNames(svc.staff) })}</p>
+                    )}
+                  </div>
                 </div>
                 <div className="flex items-center gap-4">
                   <span className={`text-sm font-semibold ${svc.isFree ? 'text-success' : 'font-mono text-text'}`}>

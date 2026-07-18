@@ -6,8 +6,63 @@ import { useTranslation } from 'react-i18next';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { RescheduleModal } from '@/components/shared/RescheduleModal';
 import { ReviewModal } from '@/components/client/ReviewModal';
-import { useClientBookings, useCancelBooking, useRescheduleBooking, useCreateReview, ApiError } from '@/lib/hooks';
+import {
+  useClientBookings,
+  useCancelBooking,
+  useRescheduleBooking,
+  useCreateReview,
+  useRespondToReviewDispute,
+  ApiError,
+} from '@/lib/hooks';
 import type { Locale } from '@/lib/i18n';
+import type { ClientBooking } from '@/lib/utils/api';
+
+function ReviewDisputeBanner({ review }: { review: NonNullable<ClientBooking['review']> }) {
+  const { t } = useTranslation();
+  const respondMutation = useRespondToReviewDispute();
+  const [response, setResponse] = useState('');
+
+  const dispute = review.dispute;
+  if (!dispute) return null;
+
+  if (dispute.status === 'UPHELD' || dispute.status === 'DISMISSED') {
+    return (
+      <p className="rounded-lg bg-surface2 px-3 py-2 text-xs text-text-muted">
+        {dispute.status === 'UPHELD' ? t('client.reviewDisputeUpheld') : t('client.reviewDisputeDismissed')}
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2 rounded-lg border border-warning/40 bg-warning/5 p-3">
+      <p className="text-xs font-semibold text-warning">{t('client.reviewDisputedLabel')}</p>
+      <p className="text-xs text-text-muted">{dispute.reason}</p>
+      {dispute.clientResponse ? (
+        <p className="text-xs text-text-muted">
+          <span className="font-semibold text-text">{t('client.yourResponse')}:</span> {dispute.clientResponse}
+        </p>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <textarea
+            value={response}
+            onChange={(e) => setResponse(e.target.value)}
+            placeholder={t('client.reviewDisputeResponsePlaceholder') as string}
+            rows={2}
+            maxLength={1000}
+            className="resize-none rounded-lg border border-border bg-bg px-3 py-2 text-xs text-text outline-none focus:border-primary"
+          />
+          <button
+            disabled={respondMutation.isPending || !response.trim()}
+            onClick={() => respondMutation.mutate({ reviewId: review._id, response: response.trim() })}
+            className="self-start rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
+          >
+            {t('client.reviewDisputeRespond')}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 type Tab = 'upcoming' | 'past' | 'cancelled';
 
@@ -207,9 +262,12 @@ export default function ClientBookingsPage() {
                     </div>
                   )}
                   {tab === 'past' && bk.status === 'completed' && (
-                    <div>
+                    <div className="flex flex-col gap-2">
                       {bk.hasReview ? (
-                        <span className="text-xs font-semibold text-text-muted">{t('client.reviewSubmitted')}</span>
+                        <>
+                          <span className="text-xs font-semibold text-text-muted">{t('client.reviewSubmitted')}</span>
+                          {bk.review && <ReviewDisputeBanner review={bk.review} />}
+                        </>
                       ) : (
                         <button
                           onClick={() => {

@@ -11,6 +11,7 @@ const Category = require('../models/Category');
 const TopPlacement = require('../models/TopPlacement');
 const Invoice = require('../models/Invoice');
 const PlatformSettings = require('../models/PlatformSettings');
+const Notification = require('../models/Notification');
 const { requireAuth } = require('../middleware/auth');
 const { requireRole } = require('../middleware/role');
 const { requirePermission, hasAdminPermission } = require('../middleware/adminPermission');
@@ -23,6 +24,7 @@ const { runDailySweep } = require('../jobs/autoUnblock');
 const { runSheetsSync } = require('../jobs/sheetsSync');
 const { recomputeBusinessReviewStats } = require('../utils/reviewStats');
 const { logAdminAction } = require('../utils/auditLog');
+const { customCategorySlug } = require('../utils/slugify');
 const AdminAuditLog = require('../models/AdminAuditLog');
 
 const router = express.Router();
@@ -40,30 +42,44 @@ const INVITABLE_ROLES = ['MODERATOR', 'FINANCE_ADMIN', 'ADMIN'];
 router.get(
   '/overview',
   asyncHandler(async (_req, res) => {
-    const [activeBusinesses, pendingBusinesses, clients, completedBookings] = await Promise.all([
+    const monthStart = `${new Date().toISOString().slice(0, 7)}-01`;
+
+    const [activeBusinesses, pendingBusinesses, clients, completedBookingsCount, monthBookings] = await Promise.all([
       Business.countDocuments({ status: 'ACTIVE' }),
       Business.countDocuments({ status: 'PENDING' }),
       User.countDocuments({ role: 'CLIENT' }),
-      Booking.find({ status: 'completed' }).lean(),
+      Booking.countDocuments({ status: 'completed' }),
+      // "Platform revenue" on the dashboard is the current month's commission, not an
+      // all-time cumulative total — an ever-growing lifetime figure reads as frozen
+      // month to month even while money is actively coming in. For other periods, the
+      // admin uses Analytics, which already breaks revenue down by any date range.
+      Booking.find({ status: 'completed', date: { $gte: monthStart } })
+        .select('price commissionRate')
+        .lean(),
     ]);
 
-    const platformRevenue = completedBookings.reduce((sum, b) => sum + b.price * (b.commissionRate ?? 0), 0);
+    const platformRevenue = monthBookings.reduce((sum, b) => sum + b.price * (b.commissionRate ?? 0), 0);
 
     res.json({
       activeBusinesses,
       pendingBusinesses,
       clients,
-      completedBookingsCount: completedBookings.length,
+      completedBookingsCount,
       platformRevenue,
     });
   })
 );
 
+const ANALYTICS_RANGES = [7, 30, 90];
+
 router.get(
   '/analytics',
-  asyncHandler(async (_req, res) => {
+  asyncHandler(async (req, res) => {
+    const requestedDays = Number(req.query.days);
+    const rangeDays = ANALYTICS_RANGES.includes(requestedDays) ? requestedDays : 30;
+
     const todayKey = new Date().toISOString().slice(0, 10);
-    const since = new Date(Date.now() - 29 * 24 * 60 * 60 * 1000);
+    const since = new Date(Date.now() - (rangeDays - 1) * 24 * 60 * 60 * 1000);
     const sinceKey = since.toISOString().slice(0, 10);
 
     const currentMonth = todayKey.slice(0, 7);
@@ -102,7 +118,7 @@ router.get(
     ]);
 
     const byDay = new Map();
-    for (let i = 0; i < 30; i++) {
+    for (let i = 0; i < rangeDays; i++) {
       const key = new Date(since.getTime() + i * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
       byDay.set(key, { date: key, newBusinesses: 0, newClients: 0, completedBookings: 0, revenue: 0 });
     }
@@ -175,7 +191,7 @@ router.get(
 
     const [servicesCount, staffCount, completedBookings, revenueAgg] = await Promise.all([
       Service.countDocuments({ business: business._id, active: true }),
-      Staff.countDocuments({ business: business._id, active: true }),
+      Staff.countDocuments({ business: business._id, active: true, virtual: { $ne: true } }),
       Booking.countDocuments({ business: business._id, status: 'completed' }),
       Booking.aggregate([
         { $match: { business: business._id, status: 'completed' } },
@@ -320,6 +336,42 @@ router.post(
   })
 );
 
+// Ends a business's current TOP placement immediately, whether it was granted for
+// free or paid for — mirrors grant-top rather than deleting history: the most recent
+// CONFIRMED placement's expiresAt is pulled back to now instead of being erased, so
+// it still shows accurately in the business's TOP-placement history afterward.
+router.post(
+  '/businesses/:id/revoke-top',
+  requirePermission('businesses'),
+  asyncHandler(async (req, res) => {
+    const business = await Business.findById(req.params.id);
+    if (!business) return res.status(404).json({ error: 'NOT_FOUND' });
+
+    const now = new Date();
+    const activePlacement = await TopPlacement.findOne({
+      business: business._id,
+      status: 'CONFIRMED',
+      expiresAt: { $gt: now },
+    }).sort({ expiresAt: -1 });
+    if (activePlacement) {
+      activePlacement.expiresAt = now;
+      await activePlacement.save();
+    }
+
+    business.top = { active: false };
+    await business.save();
+
+    await logAdminAction(req, {
+      action: 'business.revokeTop',
+      targetType: 'Business',
+      targetId: business._id,
+      targetLabel: business.name,
+    });
+
+    res.json({ business });
+  })
+);
+
 // Permanent delete — SUPER_ADMIN only. Refuses if the business still has upcoming
 // confirmed bookings, so an admin can't silently erase appointments clients are
 // still expecting; block the business first to let those play out or be cancelled.
@@ -359,6 +411,8 @@ router.get(
     const filter = {};
     if (flaggedReplies === 'true') {
       filter.replyFlagged = true;
+    } else if (status === 'DISPUTED') {
+      filter['dispute.status'] = 'OPEN';
     } else {
       filter.status = typeof status === 'string' && status ? status : 'PENDING';
     }
@@ -390,6 +444,67 @@ router.post(
     const review = await Review.findByIdAndUpdate(req.params.id, { status: 'REJECTED' }, { new: true });
     if (!review) return res.status(404).json({ error: 'NOT_FOUND' });
     await recomputeBusinessReviewStats(review.business);
+    res.json({ review });
+  })
+);
+
+router.post(
+  '/reviews/:id/dispute-resolve',
+  requirePermission('reviews'),
+  asyncHandler(async (req, res) => {
+    const { decision, note } = req.body || {};
+    if (decision !== 'UPHELD' && decision !== 'DISMISSED') {
+      return res.status(400).json({ error: 'INVALID_INPUT' });
+    }
+
+    const review = await Review.findById(req.params.id).populate('business', 'name owner').populate('client', 'name');
+    if (!review) return res.status(404).json({ error: 'NOT_FOUND' });
+    if (review.dispute?.status !== 'OPEN') return res.status(400).json({ error: 'NO_OPEN_DISPUTE' });
+
+    review.dispute.status = decision;
+    review.dispute.resolution = typeof note === 'string' && note.trim() ? note.trim() : undefined;
+    review.dispute.resolvedAt = new Date();
+    review.dispute.resolvedBy = req.userId;
+    // UPHELD means the business's challenge won — the review is unfair and stays
+    // hidden going forward, same as a moderation rejection. DISMISSED means the review
+    // stands; its status was never changed, so it simply becomes visible again.
+    if (decision === 'UPHELD') review.status = 'REJECTED';
+    await review.save();
+
+    await recomputeBusinessReviewStats(review.business._id);
+
+    await logAdminAction(req, {
+      action: 'review.disputeResolve',
+      targetType: 'Review',
+      targetId: review._id,
+      targetLabel: review.business.name,
+    });
+
+    if (review.business?.owner) {
+      await Notification.create({
+        user: review.business.owner,
+        type: 'review_dispute_resolved',
+        title: decision === 'UPHELD' ? 'Спір по відгуку задоволено' : 'Спір по відгуку відхилено',
+        text:
+          decision === 'UPHELD'
+            ? 'Адміністрація визнала ваше оскарження обґрунтованим — відгук приховано.'
+            : 'Адміністрація розглянула ваше оскарження та залишила відгук без змін.',
+        relatedReview: review._id,
+      });
+    }
+    if (review.client) {
+      await Notification.create({
+        user: review.client._id,
+        type: 'review_dispute_resolved',
+        title: decision === 'UPHELD' ? 'Ваш відгук приховано' : 'Ваш відгук залишився опублікованим',
+        text:
+          decision === 'UPHELD'
+            ? `${review.business.name} оскаржив ваш відгук, і адміністрація визнала оскарження обґрунтованим.`
+            : `${review.business.name} оскаржив ваш відгук, але адміністрація залишила його без змін.`,
+        relatedReview: review._id,
+      });
+    }
+
     res.json({ review });
   })
 );
@@ -651,14 +766,41 @@ router.get(
   asyncHandler(async (req, res) => {
     const { status } = req.query;
     const filter = {};
-    if (typeof status === 'string' && status) filter.status = status;
-    else filter.status = 'PENDING';
+    if (status === 'ALL') {
+      // no filter — every category regardless of status
+    } else if (typeof status === 'string' && status) {
+      filter.status = status;
+    } else {
+      filter.status = 'PENDING';
+    }
 
     const categories = await Category.find(filter)
       .populate('requestedByBusiness', 'name')
       .sort({ createdAt: -1 })
       .lean();
     res.json({ categories });
+  })
+);
+
+// Lets a super-admin add a category directly (already ACTIVE, immediately usable by
+// every business) instead of only ever approving ones a business requested via "Other".
+router.post(
+  '/categories',
+  requirePermission('categories'),
+  asyncHandler(async (req, res) => {
+    const { name, nameEn } = req.body || {};
+    if (typeof name !== 'string' || !name.trim() || typeof nameEn !== 'string' || !nameEn.trim()) {
+      return res.status(400).json({ error: 'INVALID_INPUT' });
+    }
+
+    const category = await Category.create({
+      slug: customCategorySlug(),
+      name: name.trim(),
+      nameEn: nameEn.trim(),
+      status: 'ACTIVE',
+    });
+    await logAdminAction(req, { action: 'category.create', targetType: 'Category', targetId: category._id, targetLabel: category.name });
+    res.status(201).json({ category });
   })
 );
 

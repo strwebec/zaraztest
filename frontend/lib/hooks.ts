@@ -7,6 +7,7 @@ import {
   addStaffTimeOff,
   approveAdminBusiness,
   assignBusinessBookingStaff,
+  createAdminCategory,
   approveAdminCategory,
   approveAdminReview,
   blockAdminBusiness,
@@ -34,11 +35,13 @@ import {
   deleteBusinessStaff,
   deleteClientAvatar,
   deleteStaffPhoto,
+  deleteServicePhoto,
   fetchAdminAnalytics,
   fetchAdminAuditLog,
   fetchAdminBusinessDetail,
   fetchAdminBusinesses,
   grantAdminBusinessTop,
+  revokeAdminBusinessTop,
   fetchAdminCategories,
   fetchAdminFinanceOverview,
   fetchAdminInvoices,
@@ -94,6 +97,9 @@ import {
   removeFavorite,
   removeStaffTimeOff,
   replyToReview,
+  disputeReview,
+  respondToReviewDispute,
+  resolveAdminReviewDispute,
   rescheduleBusinessBooking,
   rescheduleClientBooking,
   unblockAdminBusiness,
@@ -112,6 +118,7 @@ import {
   uploadBusinessGalleryPhotos,
   uploadClientAvatar,
   uploadStaffPhoto,
+  uploadServicePhoto,
   fetchSupportThread,
   sendSupportMessage,
   markSupportThreadRead,
@@ -301,6 +308,15 @@ export function useCreateReview() {
   return useMutation({
     mutationFn: ({ bookingId, payload }: { bookingId: string; payload: { rating: number; text: string } }) =>
       createReview(bookingId, payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['client-bookings'] }),
+  });
+}
+
+export function useRespondToReviewDispute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ reviewId, response }: { reviewId: string; response: string }) =>
+      respondToReviewDispute(reviewId, response),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['client-bookings'] }),
   });
 }
@@ -527,6 +543,14 @@ export function useReplyToReview() {
   });
 }
 
+export function useDisputeReview() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => disputeReview(id, reason),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['business-reviews'] }),
+  });
+}
+
 export function useBusinessTopPlacement() {
   return useQuery({ queryKey: ['business-top-placement'], queryFn: fetchBusinessTopPlacement });
 }
@@ -591,6 +615,22 @@ export function useDeleteBusinessService() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: deleteBusinessService,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['business-services'] }),
+  });
+}
+
+export function useUploadServicePhoto() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, file }: { id: string; file: File }) => uploadServicePhoto(id, file),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['business-services'] }),
+  });
+}
+
+export function useDeleteServicePhoto() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: deleteServicePhoto,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['business-services'] }),
   });
 }
@@ -690,8 +730,8 @@ export function useAdminOverview() {
   return useQuery({ queryKey: ['admin-overview'], queryFn: fetchAdminOverview });
 }
 
-export function useAdminAnalytics() {
-  return useQuery({ queryKey: ['admin-analytics'], queryFn: fetchAdminAnalytics });
+export function useAdminAnalytics(days: 7 | 30 | 90 = 30) {
+  return useQuery({ queryKey: ['admin-analytics', days], queryFn: () => fetchAdminAnalytics(days) });
 }
 
 export function useAdminTeam() {
@@ -747,6 +787,17 @@ function useAdminCategoryMutation(fn: (id: string) => Promise<unknown>) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-categories'] });
+      qc.invalidateQueries({ queryKey: ['categories'] });
+    },
+  });
+}
+
+export function useCreateCategory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createAdminCategory,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-categories'] });
       qc.invalidateQueries({ queryKey: ['categories'] });
@@ -811,6 +862,18 @@ export function useGrantBusinessTop() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, durationDays }: { id: string; durationDays: number }) => grantAdminBusinessTop(id, durationDays),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-businesses'] });
+      qc.invalidateQueries({ queryKey: ['admin-business-detail'] });
+      qc.invalidateQueries({ queryKey: ['admin-overview'] });
+    },
+  });
+}
+
+export function useRevokeBusinessTop() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: revokeAdminBusinessTop,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['admin-businesses'] });
       qc.invalidateQueries({ queryKey: ['admin-business-detail'] });
@@ -885,6 +948,15 @@ export function useApproveReview() {
 
 export function useRejectReview() {
   return useAdminReviewMutation(rejectAdminReview);
+}
+
+export function useResolveReviewDispute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, decision, note }: { id: string; decision: 'UPHELD' | 'DISMISSED'; note?: string }) =>
+      resolveAdminReviewDispute(id, decision, note),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-reviews'] }),
+  });
 }
 
 export function useRemoveReviewReply() {

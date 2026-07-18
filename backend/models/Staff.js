@@ -32,6 +32,12 @@ const staffSchema = new mongoose.Schema(
       },
     ],
     active: { type: Boolean, default: true },
+    // A hidden placeholder Staff document auto-created for businesses with zero real
+    // staff, so the existing per-staff availability/booking machinery (built entirely
+    // around Staff documents) still works when there's no actual master to assign —
+    // see utils/virtualStaff.js. Never shown to clients or business owners as a real
+    // master; every staff-listing query must exclude it.
+    virtual: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

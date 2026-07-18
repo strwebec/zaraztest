@@ -8,6 +8,7 @@ const notificationSchema = new mongoose.Schema(
       enum: [
         'booking_confirmed',
         'booking_reminder',
+        'new_booking_received',
         'booking_cancelled_by_business',
         'booking_cancelled_by_client',
         'booking_rescheduled',
@@ -17,6 +18,9 @@ const notificationSchema = new mongoose.Schema(
         'order_ready',
         'invoice_payment_reminder',
         'support_reply',
+        'review_disputed',
+        'review_dispute_response',
+        'review_dispute_resolved',
       ],
       required: true,
     },
@@ -24,6 +28,7 @@ const notificationSchema = new mongoose.Schema(
     text: { type: String, required: true },
     read: { type: Boolean, default: false },
     relatedBooking: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking' },
+    relatedReview: { type: mongoose.Schema.Types.ObjectId, ref: 'Review' },
   },
   { timestamps: true }
 );

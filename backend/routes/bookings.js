@@ -125,6 +125,15 @@ router.post('/', requireAuth, requireRole('CLIENT'), bookingLimiter, asyncHandle
       title: 'Запис підтверджено',
       text: `${business.name} — ${service.name}, ${date} о ${startTime}`,
     });
+    if (business.owner) {
+      await Notification.create({
+        user: business.owner,
+        type: 'new_booking_received',
+        title: 'Новий запис',
+        text: `${client.name} записався на ${service.name}, ${date} о ${startTime}`,
+        relatedBooking: booking._id,
+      });
+    }
 
     res.status(201).json({ booking });
   } catch (err) {
@@ -272,6 +281,15 @@ router.post('/group', requireAuth, requireRole('CLIENT'), bookingLimiter, asyncH
       title: 'Запис підтверджено',
       text: `${business.name} — ${orderedServices.map((s) => s.name).join(', ')}, ${date} о ${startTime}`,
     });
+    if (business.owner) {
+      await Notification.create({
+        user: business.owner,
+        type: 'new_booking_received',
+        title: 'Новий запис',
+        text: `${client.name} записався на ${orderedServices.map((s) => s.name).join(', ')}, ${date} о ${startTime}`,
+        relatedBooking: bookings[0]._id,
+      });
+    }
 
     res.status(201).json({ bookings });
   } catch (err) {

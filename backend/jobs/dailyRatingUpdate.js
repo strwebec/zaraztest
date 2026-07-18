@@ -15,7 +15,7 @@ async function recomputeBusinessScore(business) {
       date: { $gte: sinceDateKey },
       status: { $in: ['confirmed', 'completed'] },
     }).lean(),
-    Review.countDocuments({ business: business._id, status: 'PUBLISHED' }),
+    Review.countDocuments({ business: business._id, status: 'PUBLISHED', 'dispute.status': { $ne: 'OPEN' } }),
     ProfileView.countDocuments({ business: business._id, viewedAt: { $gte: since } }),
   ]);
 

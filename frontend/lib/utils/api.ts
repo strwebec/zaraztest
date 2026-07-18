@@ -26,6 +26,7 @@ export type Service = {
   durationMinutes: number;
   category: string;
   staff: string[];
+  photoUrl?: string;
 };
 
 export type Staff = { _id: string; name: string; role?: string; bio?: string; photoUrl?: string };
@@ -276,9 +277,20 @@ export type ClientBooking = {
   startTime: string;
   status: string;
   hasReview: boolean;
+  review?: Pick<Review, '_id' | 'rating' | 'text' | 'dispute'> | null;
   readyAt?: string;
   groupId?: string | null;
   _group: 'upcoming' | 'past' | 'cancelled';
+};
+
+export type ReviewDispute = {
+  status: 'OPEN' | 'UPHELD' | 'DISMISSED';
+  reason: string;
+  openedAt: string;
+  clientResponse?: string;
+  clientRespondedAt?: string;
+  resolution?: string;
+  resolvedAt?: string;
 };
 
 export type Review = {
@@ -291,6 +303,7 @@ export type Review = {
   status: 'PUBLISHED' | 'PENDING' | 'REJECTED';
   reply?: { text?: string; repliedAt?: string };
   replyFlagged: boolean;
+  dispute?: ReviewDispute;
   createdAt: string;
 };
 
@@ -330,6 +343,10 @@ export function confirmCancellation(bookingId: string, response: 'yes' | 'no') {
 
 export function createReview(bookingId: string, payload: { rating: number; text: string }) {
   return apiPost<{ review: Review; needsModeration: boolean }>(`/client/bookings/${bookingId}/review`, payload);
+}
+
+export function respondToReviewDispute(reviewId: string, response: string) {
+  return apiPost<{ review: Review }>(`/client/reviews/${reviewId}/dispute-response`, { response });
 }
 
 export function fetchBusinessReviewsPublic(businessId: string) {
@@ -716,8 +733,8 @@ export type AdminAnalytics = {
   };
 };
 
-export function fetchAdminAnalytics() {
-  return apiGet<AdminAnalytics>('/admin/analytics');
+export function fetchAdminAnalytics(days: 7 | 30 | 90 = 30) {
+  return apiGet<AdminAnalytics>(`/admin/analytics?days=${days}`);
 }
 
 export function fetchBusinessOwnReviews() {
@@ -726,6 +743,10 @@ export function fetchBusinessOwnReviews() {
 
 export function replyToReview(reviewId: string, text: string) {
   return apiPost<{ review: Review }>(`/business/reviews/${reviewId}/reply`, { text });
+}
+
+export function disputeReview(reviewId: string, reason: string) {
+  return apiPost<{ review: Review }>(`/business/reviews/${reviewId}/dispute`, { reason });
 }
 
 export function fetchBusinessServices() {
@@ -761,6 +782,16 @@ export function updateBusinessService(id: string, payload: Partial<{
 
 export function deleteBusinessService(id: string) {
   return apiDelete<{ ok: boolean }>(`/business/services/${id}`);
+}
+
+export function uploadServicePhoto(id: string, file: File) {
+  const form = new FormData();
+  form.append('photo', file);
+  return apiUpload<{ service: Service }>(`/business/services/${id}/photo`, form);
+}
+
+export function deleteServicePhoto(id: string) {
+  return apiDelete<{ service: Service }>(`/business/services/${id}/photo`);
 }
 
 export function fetchBusinessStaff() {
@@ -931,6 +962,10 @@ export function grantAdminBusinessTop(id: string, durationDays: number) {
   return apiPost<{ business: AdminBusiness }>(`/admin/businesses/${id}/grant-top`, { durationDays });
 }
 
+export function revokeAdminBusinessTop(id: string) {
+  return apiPost<{ business: AdminBusiness }>(`/admin/businesses/${id}/revoke-top`);
+}
+
 export type AdminBusinessDetail = BusinessDetail & {
   owner: { name: string; email: string; phone?: string };
   blockedUntil?: string | null;
@@ -980,6 +1015,10 @@ export type AdminCategory = {
 export function fetchAdminCategories(status?: string) {
   const qs = status ? `?status=${status}` : '';
   return apiGet<{ categories: AdminCategory[] }>(`/admin/categories${qs}`);
+}
+
+export function createAdminCategory(payload: { name: string; nameEn: string }) {
+  return apiPost<{ category: AdminCategory }>('/admin/categories', payload);
 }
 
 export function approveAdminCategory(id: string) {
@@ -1040,6 +1079,10 @@ export function approveAdminReview(id: string) {
 
 export function rejectAdminReview(id: string) {
   return apiPost<{ review: Review }>(`/admin/reviews/${id}/reject`);
+}
+
+export function resolveAdminReviewDispute(id: string, decision: 'UPHELD' | 'DISMISSED', note?: string) {
+  return apiPost<{ review: Review }>(`/admin/reviews/${id}/dispute-resolve`, { decision, note });
 }
 
 export function removeAdminReviewReply(id: string) {

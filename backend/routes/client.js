@@ -45,18 +45,23 @@ router.get(
       .sort({ date: -1, startTime: -1 })
       .lean();
 
-    const reviewedBookingIds = new Set(
-      (await Review.find({ client: req.userId }).select('booking').lean()).map((r) => String(r.booking))
+    const reviewByBooking = new Map(
+      (await Review.find({ client: req.userId }).select('booking rating text dispute').lean()).map((r) => [
+        String(r.booking),
+        r,
+      ])
     );
 
     const classified = all.map((b) => {
       const dt = bookingDateTime(b);
       const isCancelled = b.status === 'cancelled_by_client' || b.status === 'cancelled_by_business';
       const isPast = !isCancelled && (dt < now || b.status === 'completed' || b.status === 'no_show');
+      const review = reviewByBooking.get(String(b._id)) || null;
       return {
         ...b,
         _group: isCancelled ? 'cancelled' : isPast ? 'past' : 'upcoming',
-        hasReview: reviewedBookingIds.has(String(b._id)),
+        hasReview: !!review,
+        review,
       };
     });
 
@@ -228,7 +233,7 @@ router.post(
       return res.status(400).json({ error: 'INVALID_INPUT' });
     }
     const trimmedText = typeof text === 'string' ? text.trim() : '';
-    if (trimmedText.length < 20 || trimmedText.length > 1000) {
+    if (trimmedText.length > 1000) {
       return res.status(400).json({ error: 'INVALID_INPUT' });
     }
 
@@ -253,6 +258,36 @@ router.post(
     if (status === 'PUBLISHED') await recomputeBusinessReviewStats(booking.business);
 
     res.status(201).json({ review, needsModeration: status === 'PENDING' });
+  })
+);
+
+router.post(
+  '/reviews/:id/dispute-response',
+  asyncHandler(async (req, res) => {
+    const { response } = req.body || {};
+    if (typeof response !== 'string' || !response.trim() || response.trim().length > 1000) {
+      return res.status(400).json({ error: 'INVALID_INPUT' });
+    }
+
+    const review = await Review.findOne({ _id: req.params.id, client: req.userId }).populate('business', 'name owner');
+    if (!review) return res.status(404).json({ error: 'NOT_FOUND' });
+    if (review.dispute?.status !== 'OPEN') return res.status(400).json({ error: 'NO_OPEN_DISPUTE' });
+
+    review.dispute.clientResponse = response.trim();
+    review.dispute.clientRespondedAt = new Date();
+    await review.save();
+
+    if (review.business?.owner) {
+      await Notification.create({
+        user: review.business.owner,
+        type: 'review_dispute_response',
+        title: 'Клієнт відповів на оскарження',
+        text: `Клієнт надав пояснення щодо відгуку, який ви оскаржили. Рішення прийме адміністрація.`,
+        relatedReview: review._id,
+      });
+    }
+
+    res.json({ review });
   })
 );
 

@@ -72,7 +72,7 @@ async function syncOneBusiness(business) {
 
   const [services, staffList] = await Promise.all([
     Service.find({ business: business._id, active: true }).lean(),
-    Staff.find({ business: business._id, active: true }).lean(),
+    Staff.find({ business: business._id, active: true, virtual: { $ne: true } }).lean(),
   ]);
 
   const existingRows = await readSheetRows(business.backupSheetId);

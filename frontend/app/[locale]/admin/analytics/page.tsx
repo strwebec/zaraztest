@@ -1,14 +1,18 @@
 'use client';
 
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Download } from 'lucide-react';
 import { ResponsiveContainer, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useAdminAnalytics } from '@/lib/hooks';
 
+const RANGE_OPTIONS: (7 | 30 | 90)[] = [7, 30, 90];
+
 export default function AdminAnalyticsPage() {
   const { t } = useTranslation();
-  const { data, isLoading } = useAdminAnalytics();
+  const [days, setDays] = useState<7 | 30 | 90>(30);
+  const { data, isLoading } = useAdminAnalytics(days);
 
   const daily = data?.daily ?? [];
   const categoryBreakdown = [...(data?.categoryBreakdown ?? [])].sort((a, b) => b.count - a.count);
@@ -65,6 +69,20 @@ export default function AdminAnalyticsPage() {
           <Download size={15} />
           {t('admin.exportExcel')}
         </button>
+      </div>
+
+      <div className="flex gap-1.5 rounded-xl border border-border bg-surface p-1 sm:w-fit">
+        {RANGE_OPTIONS.map((opt) => (
+          <button
+            key={opt}
+            onClick={() => setDays(opt)}
+            className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition sm:flex-none ${
+              days === opt ? 'bg-primary text-white' : 'text-text-muted'
+            }`}
+          >
+            {t('biz.rangeDays', { count: opt })}
+          </button>
+        ))}
       </div>
 
       {isLoading && <Skeleton className="h-72" />}

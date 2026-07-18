@@ -14,6 +14,7 @@ import {
   useBlockBusiness,
   useUnblockBusiness,
   useGrantBusinessTop,
+  useRevokeBusinessTop,
   useMe,
 } from '@/lib/hooks';
 import { ApiError } from '@/lib/utils/api';
@@ -29,6 +30,7 @@ export default function AdminBusinessDetailPage() {
   const block = useBlockBusiness();
   const unblock = useUnblockBusiness();
   const grantTop = useGrantBusinessTop();
+  const revokeTop = useRevokeBusinessTop();
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [topDays, setTopDays] = useState('14');
 
@@ -170,6 +172,15 @@ export default function AdminBusinessDetailPage() {
             >
               {t('admin.grantTopAction')}
             </button>
+            {business.top?.active && (
+              <button
+                onClick={() => revokeTop.mutate(business._id)}
+                disabled={revokeTop.isPending}
+                className="rounded-xl border border-danger/40 px-4 py-2 text-xs font-bold text-danger transition hover:bg-danger/5 disabled:opacity-60"
+              >
+                {t('admin.revokeTopAction')}
+              </button>
+            )}
           </div>
         </div>
 

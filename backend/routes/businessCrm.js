@@ -408,7 +408,12 @@ router.get(
     // Need the full schedule/timeOff fields (not just name) — getWorkingWindow() reads
     // them directly, and a narrow .select() here silently makes every day look like a
     // day off for every master.
-    const staffList = await Staff.find({ ...eligibleFilter, business: req.businessId, active: true }).lean();
+    const staffList = await Staff.find({
+      ...eligibleFilter,
+      business: req.businessId,
+      active: true,
+      virtual: { $ne: true },
+    }).lean();
     if (staffList.length === 0) return res.status(404).json({ error: 'NO_ELIGIBLE_STAFF' });
 
     const durationMinutes = service.durationMinutes;

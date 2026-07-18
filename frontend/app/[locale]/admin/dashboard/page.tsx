@@ -1,12 +1,16 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useAdminOverview, useAdminBusinesses, useApproveBusiness, useRejectBusiness } from '@/lib/hooks';
+import type { Locale } from '@/lib/i18n';
 
 export default function AdminDashboardPage() {
   const { t } = useTranslation();
+  const { locale } = useParams<{ locale: Locale }>();
   const { data: overview, isLoading } = useAdminOverview();
   const { data: pendingData, isLoading: pendingLoading } = useAdminBusinesses('PENDING');
   const approve = useApproveBusiness();
@@ -27,7 +31,12 @@ export default function AdminDashboardPage() {
         { label: t('admin.activeBusinesses'), value: overview.activeBusinesses },
         { label: t('admin.pendingBusinesses'), value: overview.pendingBusinesses },
         { label: t('admin.clients'), value: overview.clients },
-        { label: t('admin.platformRevenue'), value: `${overview.platformRevenue.toFixed(0)}₴` },
+        {
+          label: t('admin.platformRevenue'),
+          value: `${overview.platformRevenue.toFixed(0)}₴`,
+          href: `/${locale}/admin/analytics`,
+          hint: t('admin.platformRevenueHint'),
+        },
       ]
     : [];
 
@@ -38,15 +47,25 @@ export default function AdminDashboardPage() {
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         {isLoading
           ? Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24" />)
-          : statCards.map((card) => (
-              <div
-                key={card.label}
-                className="flex flex-col gap-2.5 rounded-2xl border border-border bg-surface p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
-              >
-                <span className="text-[13px] font-medium text-text-muted">{card.label}</span>
-                <span className="font-mono font-tabular text-2xl font-bold text-text">{card.value}</span>
-              </div>
-            ))}
+          : statCards.map((card) => {
+              const content = (
+                <>
+                  <span className="text-[13px] font-medium text-text-muted">{card.label}</span>
+                  <span className="font-mono font-tabular text-2xl font-bold text-text">{card.value}</span>
+                </>
+              );
+              const className =
+                'flex flex-col gap-2.5 rounded-2xl border border-border bg-surface p-5 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md';
+              return card.href ? (
+                <Link key={card.label} href={card.href} title={card.hint} className={className}>
+                  {content}
+                </Link>
+              ) : (
+                <div key={card.label} className={className}>
+                  {content}
+                </div>
+              );
+            })}
       </div>
 
       <div className="flex flex-col gap-3">

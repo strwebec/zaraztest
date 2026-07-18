@@ -4,7 +4,92 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { StarRating } from '@/components/shared/StarRating';
-import { useBusinessOwnReviews, useReplyToReview } from '@/lib/hooks';
+import { useBusinessOwnReviews, useReplyToReview, useDisputeReview } from '@/lib/hooks';
+import type { Review } from '@/lib/utils/api';
+
+function DisputeSection({ review }: { review: Review }) {
+  const { t } = useTranslation();
+  const disputeMutation = useDisputeReview();
+  const [disputing, setDisputing] = useState(false);
+  const [reason, setReason] = useState('');
+
+  const dispute = review.dispute;
+
+  if (dispute?.status === 'OPEN') {
+    return (
+      <div className="flex flex-col gap-1.5 rounded-xl border border-warning/40 bg-warning/5 p-3">
+        <span className="text-xs font-bold text-warning">{t('biz.disputeOpenLabel')}</span>
+        <p className="text-xs text-text-muted">
+          <span className="font-semibold text-text">{t('biz.disputeYourReason')}:</span> {dispute.reason}
+        </p>
+        {dispute.clientResponse ? (
+          <p className="text-xs text-text-muted">
+            <span className="font-semibold text-text">{t('biz.disputeClientResponse')}:</span> {dispute.clientResponse}
+          </p>
+        ) : (
+          <p className="text-xs text-text-muted">{t('biz.disputeAwaitingClient')}</p>
+        )}
+        <p className="text-[11px] text-text-muted">{t('biz.disputePendingReview')}</p>
+      </div>
+    );
+  }
+
+  if (dispute?.status === 'UPHELD' || dispute?.status === 'DISMISSED') {
+    return (
+      <div
+        className={`flex flex-col gap-1 rounded-xl border p-3 text-xs ${
+          dispute.status === 'UPHELD' ? 'border-success/40 bg-success/5' : 'border-border bg-bg'
+        }`}
+      >
+        <span className={`font-bold ${dispute.status === 'UPHELD' ? 'text-success' : 'text-text-muted'}`}>
+          {dispute.status === 'UPHELD' ? t('biz.disputeUpheld') : t('biz.disputeDismissed')}
+        </span>
+        {dispute.resolution && <p className="text-text-muted">{dispute.resolution}</p>}
+      </div>
+    );
+  }
+
+  if (disputing) {
+    return (
+      <div className="flex flex-col gap-2">
+        <textarea
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder={t('biz.disputeReasonPlaceholder') as string}
+          rows={3}
+          maxLength={1000}
+          className="resize-none rounded-xl border border-border bg-bg px-4 py-2 text-sm text-text outline-none focus:border-primary"
+        />
+        <div className="flex gap-2">
+          <button
+            disabled={disputeMutation.isPending || !reason.trim()}
+            onClick={() => {
+              disputeMutation.mutate(
+                { id: review._id, reason: reason.trim() },
+                { onSuccess: () => setDisputing(false) }
+              );
+            }}
+            className="rounded-xl bg-warning px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+          >
+            {t('biz.disputeSubmit')}
+          </button>
+          <button
+            onClick={() => setDisputing(false)}
+            className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-text-muted"
+          >
+            {t('biz.cancel')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <button onClick={() => setDisputing(true)} className="self-start text-xs font-semibold text-warning">
+      {t('biz.disputeAction')}
+    </button>
+  );
+}
 
 export default function BusinessReviewsPage() {
   const { t } = useTranslation();
@@ -40,7 +125,7 @@ export default function BusinessReviewsPage() {
                 <span className="text-sm font-bold text-text">{r.client.name}</span>
                 <StarRating value={r.rating} size="sm" />
               </div>
-              <p className="text-sm text-text-muted">{r.text}</p>
+              {r.text && <p className="text-sm text-text-muted">{r.text}</p>}
 
               {r.reply?.text ? (
                 <div className="ml-4 flex flex-col gap-1 rounded-xl bg-bg p-3">
@@ -75,6 +160,8 @@ export default function BusinessReviewsPage() {
                   {t('biz.reply')}
                 </button>
               )}
+
+              <DisputeSection review={r} />
             </div>
           ))}
       </div>

@@ -8,6 +8,7 @@ import { ServiceRow } from '@/components/business/ServiceRow';
 import { MasterCard } from '@/components/business/MasterCard';
 import { BookingPanel } from '@/components/business/BookingPanel';
 import { ReviewsSection } from '@/components/business/ReviewsSection';
+import { GalleryLightbox } from '@/components/business/GalleryLightbox';
 import { Skeleton } from '@/components/ui/Skeleton';
 import {
   useBusinessDetail,
@@ -45,6 +46,7 @@ export default function BusinessProfilePage() {
   const [selectedSlot, setSelectedSlot] = useState<{ time: string; staffId: string } | null>(null);
   const [comment, setComment] = useState('');
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
 
   const MAX_QUANTITY = 10;
 
@@ -248,6 +250,12 @@ export default function BusinessProfilePage() {
             ))}
           </section>
 
+          {/* On mobile, picking a time is the natural next step right after choosing
+              services — the sidebar copy (below, lg:flex) already covers desktop, so
+              this inline copy only needs to render before the supplementary sections
+              (masters/gallery/reviews), not after them. */}
+          <section className="flex flex-col gap-8 lg:hidden">{bookingPanel}</section>
+
           {staff.length > 0 && (
             <section className="flex flex-col gap-3">
               <h2 className="text-xs font-bold uppercase tracking-wide text-text-muted">{t('business.masters')}</h2>
@@ -263,22 +271,36 @@ export default function BusinessProfilePage() {
             <section className="flex flex-col gap-3">
               <h2 className="text-xs font-bold uppercase tracking-wide text-text-muted">{t('business.gallery')}</h2>
               <div className="columns-2 gap-3 sm:columns-3">
-                {business.galleryUrls.map((url) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
+                {business.galleryUrls.map((url, i) => (
+                  <button
                     key={url}
-                    src={url}
-                    alt={business.name}
-                    className="mb-3 w-full rounded-2xl border border-border object-cover"
-                  />
+                    type="button"
+                    onClick={() => setLightboxIndex(i)}
+                    className="mb-3 block w-full"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={url}
+                      alt={business.name}
+                      className="w-full rounded-2xl border border-border object-cover transition hover:opacity-90"
+                    />
+                  </button>
                 ))}
               </div>
             </section>
           )}
 
-          <ReviewsSection businessId={id} />
+          {lightboxIndex !== null && business.galleryUrls && (
+            <GalleryLightbox
+              urls={business.galleryUrls}
+              index={lightboxIndex}
+              alt={business.name}
+              onClose={() => setLightboxIndex(null)}
+              onIndexChange={setLightboxIndex}
+            />
+          )}
 
-          <section className="flex flex-col gap-8 lg:hidden">{bookingPanel}</section>
+          <ReviewsSection businessId={id} />
         </div>
 
         <div className="hidden flex-1 self-start rounded-[20px] border border-border bg-surface p-6 lg:sticky lg:top-24 lg:flex lg:max-w-sm lg:flex-col">
