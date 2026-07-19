@@ -9,7 +9,7 @@
   },
   "home": {
     "title": "Find time for yourself",
-    "subtitle": "Book a manicure, haircut or massage in 20 seconds — no calls",
+    "subtitle": "Book a manicure, haircut or massage in 30 seconds — no calls",
     "searchPlaceholder": "What service are you looking for?",
     "today": "Today",
     "search": "Search",
@@ -32,7 +32,10 @@
     "district": "District",
     "priceFrom": "from",
     "noResults": "No availability found for this date",
-    "noCategoryMatch": "No category matched \"{{query}}\" — showing all businesses"
+    "noCategoryMatch": "No category matched \"{{query}}\" — showing all businesses",
+    "loadError": "Couldn't load businesses — the server may have just woken up. Please try again.",
+    "retry": "Try again",
+    "retrying": "Retrying..."
   },
   "auth": {
     "loginTab": "Sign in",
@@ -47,6 +50,7 @@
     "emailTaken": "This email is already registered",
     "weakPassword": "Password must be at least 8 characters",
     "genericError": "Something went wrong, please try again",
+    "serverWakingUp": "The server just woke up from a pause — this takes a few seconds. Please try logging in again.",
     "accountBlocked": "Your account is temporarily restricted until {{until}} due to cancellation policy violations",
     "asClient": "I'm a client",
     "asBusiness": "I'm a business",

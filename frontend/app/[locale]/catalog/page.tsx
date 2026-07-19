@@ -50,7 +50,13 @@ function CatalogPageInner() {
   }, [query]);
 
   const { data: categoriesData } = useCategories();
-  const { data, isLoading } = useBusinesses({ city: CITY_SLUG, category, date, sort, q: debouncedQuery.trim() || undefined });
+  const { data, isLoading, isError, refetch, isFetching } = useBusinesses({
+    city: CITY_SLUG,
+    category,
+    date,
+    sort,
+    q: debouncedQuery.trim() || undefined,
+  });
 
   const categories = categoriesData?.categories ?? [];
   const businesses = data?.businesses ?? [];
@@ -155,11 +161,25 @@ function CatalogPageInner() {
           {isLoading &&
             Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-64" />)}
 
-          {!isLoading && businesses.length === 0 && (
+          {!isLoading && isError && (
+            <div className="col-span-full flex flex-col items-center gap-3 py-16 text-center text-sm text-text-muted">
+              <p>{t('catalog.loadError')}</p>
+              <button
+                onClick={() => refetch()}
+                disabled={isFetching}
+                className="rounded-xl border border-primary/40 px-4 py-2 text-xs font-semibold text-primary transition hover:bg-primary-glow disabled:opacity-50"
+              >
+                {isFetching ? t('catalog.retrying') : t('catalog.retry')}
+              </button>
+            </div>
+          )}
+
+          {!isLoading && !isError && businesses.length === 0 && (
             <div className="col-span-full py-16 text-center text-sm text-text-muted">{t('catalog.noResults')}</div>
           )}
 
           {!isLoading &&
+            !isError &&
             businesses.map((biz, i) => (
               <BusinessCard key={biz.id} biz={biz} index={i} onClick={() => goToBusiness(biz.id)} />
             ))}

@@ -159,11 +159,18 @@ function LoginPageInner() {
     );
   }
 
+  // A raw network failure (fetch rejected) or a response with no parseable error
+  // code (status >= 500, or a non-JSON body like Render's gateway-timeout page) both
+  // mean the request never reached real app logic — most often because the free-tier
+  // backend was asleep and is still waking up. That's worth a distinct, actionable
+  // message instead of the flat "something went wrong" shown for a genuine app error.
+  const looksLikeColdStart =
+    !!error && (!(error instanceof ApiError) || !error.code || error.status >= 500);
   const errorMessage =
     error instanceof ApiError && ERROR_KEY[error.code ?? '']
       ? t(ERROR_KEY[error.code ?? ''])
       : error && !(error instanceof ApiError && error.code === 'EMAIL_NOT_VERIFIED')
-        ? t('auth.genericError')
+        ? t(looksLikeColdStart ? 'auth.serverWakingUp' : 'auth.genericError')
         : null;
 
   if (pendingVerification) {

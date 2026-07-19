@@ -11,9 +11,14 @@ const skipInTest = () => process.env.NODE_ENV === 'test';
 
 const publicLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 100,
+  // A single browsing session (catalog + a couple of business profiles + their
+  // availability/review lookups) can easily reach a few dozen requests, and every
+  // route-specific limiter below is layered on top of this global one anyway — this
+  // just needs to stop abuse, not double as the real per-route budget.
+  limit: 300,
   standardHeaders: true,
   legacyHeaders: false,
+  message: { error: 'TOO_MANY_ATTEMPTS' },
 });
 
 const authedLimiter = rateLimit({
@@ -21,6 +26,7 @@ const authedLimiter = rateLimit({
   limit: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  message: { error: 'TOO_MANY_ATTEMPTS' },
 });
 
 const loginLimiter = rateLimit({
@@ -58,6 +64,7 @@ const bookingLimiter = rateLimit({
   limit: 5,
   standardHeaders: true,
   legacyHeaders: false,
+  message: { error: 'TOO_MANY_ATTEMPTS' },
 });
 
 const reviewLimiter = rateLimit({
@@ -73,6 +80,7 @@ const catalogLimiter = rateLimit({
   limit: 60,
   standardHeaders: true,
   legacyHeaders: false,
+  message: { error: 'TOO_MANY_ATTEMPTS' },
 });
 
 const adminLimiter = rateLimit({
@@ -80,6 +88,7 @@ const adminLimiter = rateLimit({
   limit: 20,
   standardHeaders: true,
   legacyHeaders: false,
+  message: { error: 'TOO_MANY_ATTEMPTS' },
 });
 
 module.exports = {
