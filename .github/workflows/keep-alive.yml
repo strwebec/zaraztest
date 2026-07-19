@@ -2,13 +2,26 @@ name: Keep Render services awake
 
 # Render's free tier spins a web service down after ~15 minutes with no
 # incoming traffic, and the next real visitor then waits 20-50s for a cold
-# start. Pinging both services every 10 minutes keeps them from ever hitting
-# that idle threshold. GitHub's own scheduler can run a few minutes late,
-# especially on quiet repos — this is a best-effort mitigation, not a
-# guarantee, but it removes cold starts for all normal traffic patterns.
+# start. Pinging both services every 5 minutes keeps them well under that
+# threshold even if one run is late.
+#
+# This requires the repo to be PUBLIC. GitHub gives private repos only 2,000
+# free Actions minutes/month, and every scheduled run bills a minimum of 1
+# minute regardless of actual runtime — a 5-minute cadence is ~8,600 min/month,
+# more than 4x the private-repo free allowance, so GitHub silently stops
+# running it once the quota is exhausted (this is what happened before: the
+# workflow existed and looked correct but wasn't actually firing). Public
+# repos get unlimited free Actions minutes, which is why this only works once
+# visibility is changed at github.com/strwebec/zaraztest/settings.
+#
+# GitHub also documents schedule triggers as best-effort — they can still be
+# skipped or delayed by GitHub's own scheduler regardless of quota, especially
+# right at round-number times (:00, :10, :20...) when everyone else's cron
+# jobs fire too. Offsetting a few minutes off those marks reduces (but doesn't
+# eliminate) that risk.
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '2,7,12,17,22,27,32,37,42,47,52,57 * * * *'
   workflow_dispatch: {}
 
 jobs:
