@@ -28,6 +28,7 @@ import {
   createManualBooking,
   createReview,
   deleteAdminBusiness,
+  deleteAdminCategory,
   deleteAdminUser,
   deleteBusinessCoverPhoto,
   deleteBusinessGalleryPhoto,
@@ -811,6 +812,10 @@ export function useApproveCategory() {
 
 export function useRejectCategory() {
   return useAdminCategoryMutation(rejectAdminCategory);
+}
+
+export function useDeleteCategory() {
+  return useAdminCategoryMutation(deleteAdminCategory);
 }
 
 function useAdminBusinessMutation(fn: (id: string) => Promise<unknown>) {

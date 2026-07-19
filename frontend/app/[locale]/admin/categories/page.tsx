@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { RequireAdminRole } from '@/components/admin/RequireAdminRole';
-import { useAdminCategories, useApproveCategory, useRejectCategory, useCreateCategory, ApiError } from '@/lib/hooks';
+import { useMe, useAdminCategories, useApproveCategory, useRejectCategory, useCreateCategory, useDeleteCategory, ApiError } from '@/lib/hooks';
 
 type Tab = 'PENDING' | 'ACTIVE' | 'REJECTED' | 'ALL';
 
@@ -16,16 +16,40 @@ const STATUS_STYLE: Record<string, string> = {
 
 export default function AdminCategoriesPage() {
   const { t } = useTranslation();
+  const { data: meData } = useMe();
+  const isSuperAdmin = meData?.user?.role === 'SUPER_ADMIN';
   const [tab, setTab] = useState<Tab>('PENDING');
   const { data, isLoading } = useAdminCategories(tab);
   const approve = useApproveCategory();
   const reject = useRejectCategory();
   const createCategory = useCreateCategory();
+  const deleteCategory = useDeleteCategory();
 
   const [showForm, setShowForm] = useState(false);
   const [name, setName] = useState('');
   const [nameEn, setNameEn] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
+  const [deleteErrorById, setDeleteErrorById] = useState<Record<string, string>>({});
+
+  function handleDelete(id: string, name: string) {
+    if (!window.confirm(t('admin.deleteCategoryConfirm', { name }) as string)) return;
+    setDeleteErrorById((prev) => {
+      const { [id]: _removed, ...rest } = prev;
+      return rest;
+    });
+    deleteCategory.mutate(id, {
+      onError: (err) => {
+        const message =
+          err instanceof ApiError && err.code === 'CATEGORY_IN_USE'
+            ? (t('admin.categoryInUse', {
+                businesses: (err.data?.businessCount as number) ?? 0,
+                services: (err.data?.serviceCount as number) ?? 0,
+              }) as string)
+            : (t('auth.genericError') as string);
+        setDeleteErrorById((prev) => ({ ...prev, [id]: message }));
+      },
+    });
+  }
 
   const categories = data?.categories ?? [];
 
@@ -117,38 +141,49 @@ export default function AdminCategoriesPage() {
 
           {!isLoading &&
             categories.map((cat) => (
-              <div
-                key={cat._id}
-                className="flex items-center justify-between rounded-2xl border border-border bg-surface p-4 shadow-xs"
-              >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-text">{cat.name}</span>
-                    <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[cat.status] ?? 'bg-surface2 text-text-muted'}`}>
-                      {t(`admin.categoryStatus.${cat.status}`)}
-                    </span>
+              <div key={cat._id} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-bold text-text">{cat.name}</span>
+                      <span className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[cat.status] ?? 'bg-surface2 text-text-muted'}`}>
+                        {t(`admin.categoryStatus.${cat.status}`)}
+                      </span>
+                    </div>
+                    <div className="text-xs text-text-muted">
+                      {cat.nameEn}
+                      {cat.requestedByBusiness && ` · ${t('admin.requestedBy')}: ${cat.requestedByBusiness.name}`}
+                    </div>
                   </div>
-                  <div className="text-xs text-text-muted">
-                    {cat.nameEn}
-                    {cat.requestedByBusiness && ` · ${t('admin.requestedBy')}: ${cat.requestedByBusiness.name}`}
+                  <div className="flex gap-2">
+                    {cat.status === 'PENDING' && (
+                      <>
+                        <button
+                          onClick={() => approve.mutate(cat._id)}
+                          className="rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-white"
+                        >
+                          {t('admin.approve')}
+                        </button>
+                        <button
+                          onClick={() => reject.mutate(cat._id)}
+                          className="rounded-lg border border-danger/40 px-4 py-1.5 text-xs font-semibold text-danger"
+                        >
+                          {t('admin.reject')}
+                        </button>
+                      </>
+                    )}
+                    {isSuperAdmin && (
+                      <button
+                        onClick={() => handleDelete(cat._id, cat.name)}
+                        disabled={deleteCategory.isPending}
+                        className="rounded-lg border border-danger/40 px-4 py-1.5 text-xs font-semibold text-danger disabled:opacity-60"
+                      >
+                        {t('admin.deleteCategory')}
+                      </button>
+                    )}
                   </div>
                 </div>
-                {cat.status === 'PENDING' && (
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => approve.mutate(cat._id)}
-                      className="rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-white"
-                    >
-                      {t('admin.approve')}
-                    </button>
-                    <button
-                      onClick={() => reject.mutate(cat._id)}
-                      className="rounded-lg border border-danger/40 px-4 py-1.5 text-xs font-semibold text-danger"
-                    >
-                      {t('admin.reject')}
-                    </button>
-                  </div>
-                )}
+                {deleteErrorById[cat._id] && <p className="text-xs text-danger">{deleteErrorById[cat._id]}</p>}
               </div>
             ))}
         </div>

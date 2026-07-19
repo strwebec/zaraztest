@@ -543,6 +543,9 @@
     "categoryTabActive": "Активні",
     "categoryTabRejected": "Відхилені",
     "categoryTabAll": "Всі",
+    "deleteCategory": "Видалити",
+    "deleteCategoryConfirm": "Видалити категорію «{{name}}»? Цю дію не можна скасувати.",
+    "categoryInUse": "Не можна видалити — категорію використовують {{businesses}} закладів і {{services}} послуг. Спочатку перенесіть їх в іншу категорію.",
     "categoryStatus": {
       "ACTIVE": "Активна",
       "PENDING": "На розгляді",

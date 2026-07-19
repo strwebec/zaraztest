@@ -543,6 +543,9 @@
     "categoryTabActive": "Active",
     "categoryTabRejected": "Rejected",
     "categoryTabAll": "All",
+    "deleteCategory": "Delete",
+    "deleteCategoryConfirm": "Delete category \"{{name}}\"? This can't be undone.",
+    "categoryInUse": "Can't delete — {{businesses}} businesses and {{services}} services still use this category. Move them to another category first.",
     "categoryStatus": {
       "ACTIVE": "Active",
       "PENDING": "Pending",

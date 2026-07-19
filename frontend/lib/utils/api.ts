@@ -1037,6 +1037,10 @@ export function rejectAdminCategory(id: string) {
   return apiPost<{ category: AdminCategory }>(`/admin/categories/${id}/reject`);
 }
 
+export function deleteAdminCategory(id: string) {
+  return apiDelete<{ ok: boolean }>(`/admin/categories/${id}`);
+}
+
 export type AdminAuditLogEntry = {
   _id: string;
   admin: { _id: string; name: string; email: string } | null;

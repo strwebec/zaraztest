@@ -809,6 +809,31 @@ router.post(
   })
 );
 
+// Super-admin only (not the general 'categories' bucket moderators also get) since
+// deleting is destructive and irreversible, unlike approve/reject which just toggle
+// status. Blocked while any business or service still references the category's slug
+// so removing a duplicate can't silently orphan real listings — reassign them first.
+router.delete(
+  '/categories/:id',
+  onlySuperAdmin,
+  asyncHandler(async (req, res) => {
+    const category = await Category.findById(req.params.id);
+    if (!category) return res.status(404).json({ error: 'NOT_FOUND' });
+
+    const [businessCount, serviceCount] = await Promise.all([
+      Business.countDocuments({ category: category.slug }),
+      Service.countDocuments({ category: category.slug }),
+    ]);
+    if (businessCount || serviceCount) {
+      return res.status(409).json({ error: 'CATEGORY_IN_USE', businessCount, serviceCount });
+    }
+
+    await category.deleteOne();
+    await logAdminAction(req, { action: 'category.delete', targetType: 'Category', targetId: category._id, targetLabel: category.name });
+    res.json({ ok: true });
+  })
+);
+
 router.post(
   '/categories/:id/approve',
   requirePermission('categories'),
