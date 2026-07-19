@@ -87,7 +87,7 @@ export default function AdminReviewsPage() {
               <div key={r._id} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-bold text-text">
-                    {businessName} · {r.client.name}
+                    {businessName} · {r.client?.name ?? t('admin.deletedClient')}
                   </span>
                   <StarRating value={r.rating} size="sm" />
                 </div>

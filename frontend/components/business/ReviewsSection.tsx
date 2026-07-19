@@ -19,7 +19,7 @@ export function ReviewsSection({ businessId }: { businessId: string }) {
         {reviews.map((r) => (
           <div key={r._id} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-xs">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-bold text-text">{r.client.name}</span>
+              <span className="text-sm font-bold text-text">{r.client?.name ?? t('business.deletedClient')}</span>
               <StarRating value={r.rating} size="sm" />
             </div>
             {r.text && <p className="text-sm text-text-muted">{r.text}</p>}

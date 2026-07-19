@@ -299,7 +299,7 @@ export type ReviewDispute = {
 export type Review = {
   _id: string;
   business: string | { _id: string; name: string };
-  client: { _id: string; name: string };
+  client: { _id: string; name: string } | null;
   booking: string;
   rating: number;
   text: string;
