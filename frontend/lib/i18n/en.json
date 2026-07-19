@@ -98,6 +98,7 @@
     "confirmBooking": "Confirm booking",
     "bookingConfirmed": "Booking confirmed!",
     "slotTaken": "This slot was just taken — pick another",
+    "slotInPast": "This time has already passed — pick another",
     "slotOutsideHours": "This time is outside the business's or staff's working hours — pick another",
     "slotOnBreak": "This is the staff member's lunch break — pick another time",
     "clientTimeConflict": "You already have a booking at {{time}} — {{service}} at \"{{business}}\". Pick another time.",

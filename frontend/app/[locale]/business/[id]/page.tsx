@@ -135,6 +135,8 @@ export default function BusinessProfilePage() {
     } catch (err) {
       if (err instanceof ApiError && err.code === 'SLOT_TAKEN') {
         setFeedback({ type: 'error', message: t('business.slotTaken') });
+      } else if (err instanceof ApiError && err.code === 'SLOT_IN_PAST') {
+        setFeedback({ type: 'error', message: t('business.slotInPast') });
       } else if (err instanceof ApiError && err.code === 'OUTSIDE_WORKING_HOURS') {
         setFeedback({ type: 'error', message: t('business.slotOutsideHours') });
       } else if (err instanceof ApiError && err.code === 'ON_BREAK') {

@@ -16,6 +16,13 @@ function minutesToTime(mins) {
   return `${h}:${m}`;
 }
 
+function localDateKey(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function dayKeyForDate(dateStr) {
   const d = new Date(`${dateStr}T00:00:00`);
   return WEEKDAY_KEYS[d.getDay()];
@@ -116,8 +123,19 @@ async function computeFreeSlots({ staff, date, durationMinutes, stepMinutes = DE
     return [s - bufferMinutes, s + b.durationMinutes + bufferMinutes];
   });
 
+  // Booking creation rejects a slot the moment it's <= now (see SLOT_IN_PAST in
+  // routes/bookings.js, which reads `${date}T${startTime}` in server-local time) —
+  // without this, a same-day date offers slots that already slipped into the past,
+  // and clicking one fails with a confusing generic error even though the slot
+  // looked bookable a second earlier. Uses the same server-local interpretation as
+  // that check and dayKeyForDate() above, not UTC, so the two never disagree.
+  const now = new Date();
+  const isToday = date === localDateKey(now);
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+
   const slots = [];
   for (let t = startMin; t + durationMinutes <= endMin; t += stepMinutes) {
+    if (isToday && t <= nowMin) continue;
     if (overlapsBreak(window, t, t + durationMinutes)) continue;
     const overlaps = busyRanges.some(([bs, be]) => t < be && t + durationMinutes > bs);
     if (!overlaps) slots.push(minutesToTime(t));
