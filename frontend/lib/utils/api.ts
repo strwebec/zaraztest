@@ -23,6 +23,7 @@ export type Service = {
   price: number;
   isFree?: boolean;
   combinable?: boolean;
+  repeatable?: boolean;
   durationMinutes: number;
   category: string;
   staff: string[];
@@ -49,6 +50,8 @@ export type BusinessDetail = {
   platformReviewsCount: number;
   top?: { active: boolean; until?: string };
   cancellationPolicyHours: 12 | 24 | 48;
+  bufferMinutes?: number;
+  bookingWindowDays?: number;
   status?: 'PENDING' | 'ACTIVE' | 'HIDDEN' | 'BLOCKED';
   rejectionReason?: string;
   backupSheetUrl?: string;
@@ -270,7 +273,7 @@ export function logout() {
 
 export type ClientBooking = {
   _id: string;
-  business: { _id: string; name: string; category: string; cancellationPolicyHours: number };
+  business: { _id: string; name: string; category: string; cancellationPolicyHours: number; bookingWindowDays?: number };
   service: { _id: string; name: string };
   staff: { _id: string; name: string };
   date: string;
@@ -479,6 +482,8 @@ export function updateBusinessMe(payload: Partial<{
   phone: string;
   googleMapsUrl: string;
   socials: { instagram?: string; facebook?: string };
+  bufferMinutes: number;
+  bookingWindowDays: number;
 }>) {
   return apiPatch<{ business: BusinessDetail }>('/business/me', payload);
 }
@@ -513,12 +518,13 @@ export function fetchBusinessBookings(date: string) {
 
 export function createManualBooking(payload: {
   serviceId: string;
-  staffId: string;
+  staffId?: string;
   date: string;
   startTime: string;
   clientName: string;
   clientPhone?: string;
   comment?: string;
+  quantity?: number;
 }) {
   return apiPost<{ booking: BusinessBooking }>('/business/bookings', payload);
 }
@@ -759,6 +765,7 @@ export function createBusinessService(payload: {
   price: number;
   isFree?: boolean;
   combinable?: boolean;
+  repeatable?: boolean;
   durationMinutes: number;
   category: string;
   customCategoryName?: string;
@@ -773,6 +780,7 @@ export function updateBusinessService(id: string, payload: Partial<{
   price: number;
   isFree: boolean;
   combinable: boolean;
+  repeatable: boolean;
   durationMinutes: number;
   category: string;
   staff: string[];

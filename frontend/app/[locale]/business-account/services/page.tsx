@@ -122,6 +122,7 @@ function ServiceEditForm({
   const [price, setPrice] = useState(String(service.price));
   const [isFree, setIsFree] = useState(!!service.isFree);
   const [combinable, setCombinable] = useState(service.combinable !== false);
+  const [repeatable, setRepeatable] = useState(service.repeatable !== false);
   const [durationMinutes, setDurationMinutes] = useState(String(service.durationMinutes));
   const [staffIds, setStaffIds] = useState<string[]>(service.staff ?? []);
   const [error, setError] = useState('');
@@ -152,6 +153,10 @@ function ServiceEditForm({
       <label className="flex items-center gap-2 text-xs font-semibold text-text-muted">
         <input type="checkbox" checked={combinable} onChange={(e) => setCombinable(e.target.checked)} />
         {t('biz.combinableService')}
+      </label>
+      <label className="flex items-center gap-2 text-xs font-semibold text-text-muted">
+        <input type="checkbox" checked={repeatable} onChange={(e) => setRepeatable(e.target.checked)} />
+        {t('biz.repeatableService')}
       </label>
       <div className="flex gap-2">
         {!isFree && (
@@ -189,6 +194,7 @@ function ServiceEditForm({
                 price: isFree ? 0 : Number(price),
                 isFree,
                 combinable,
+                repeatable,
                 durationMinutes: Number(durationMinutes),
                 staff: staffIds,
               },
@@ -197,6 +203,8 @@ function ServiceEditForm({
           } catch (err) {
             if (err instanceof ApiError && err.code === 'SERVICE_TOO_LONG') {
               setError(t('biz.serviceTooLong', { minutes: err.data?.maxDurationMinutes }) as string);
+            } else if (err instanceof ApiError && err.code === 'CATEGORY_ALREADY_EXISTS') {
+              setError(t('biz.categoryAlreadyExists') as string);
             } else {
               setError(t('auth.genericError') as string);
             }
@@ -231,6 +239,7 @@ export default function BusinessServicesPage() {
   const [price, setPrice] = useState('');
   const [isFree, setIsFree] = useState(false);
   const [combinable, setCombinable] = useState(true);
+  const [repeatable, setRepeatable] = useState(true);
   const [durationMinutes, setDurationMinutes] = useState('');
   const [staffIds, setStaffIds] = useState<string[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -267,6 +276,7 @@ export default function BusinessServicesPage() {
         price: isFree ? 0 : Number(price),
         isFree,
         combinable,
+        repeatable,
         durationMinutes: Number(durationMinutes),
         staff: staffIds.length ? staffIds : undefined,
       });
@@ -276,12 +286,15 @@ export default function BusinessServicesPage() {
       setPrice('');
       setIsFree(false);
       setCombinable(true);
+      setRepeatable(true);
       setDurationMinutes('');
       setStaffIds([]);
       setShowForm(false);
     } catch (err) {
       if (err instanceof ApiError && err.code === 'SERVICE_TOO_LONG') {
         setCreateError(t('biz.serviceTooLong', { minutes: err.data?.maxDurationMinutes }) as string);
+      } else if (err instanceof ApiError && err.code === 'CATEGORY_ALREADY_EXISTS') {
+        setCreateError(t('biz.categoryAlreadyExists') as string);
       } else {
         setCreateError(t('auth.genericError') as string);
       }
@@ -344,6 +357,10 @@ export default function BusinessServicesPage() {
           <label className="flex items-center gap-2 text-sm font-semibold text-text-muted">
             <input type="checkbox" checked={combinable} onChange={(e) => setCombinable(e.target.checked)} />
             {t('biz.combinableService')}
+          </label>
+          <label className="flex items-center gap-2 text-sm font-semibold text-text-muted">
+            <input type="checkbox" checked={repeatable} onChange={(e) => setRepeatable(e.target.checked)} />
+            {t('biz.repeatableService')}
           </label>
           <div className="flex gap-3">
             {!isFree && (

@@ -20,10 +20,12 @@ const { applyClientViolation } = require('../utils/clientPenalty');
 const { containsStopWords } = require('../utils/stopWords');
 const { applyPhoneReveal } = require('../utils/phoneReveal');
 const { recomputeBusinessReviewStats } = require('../utils/reviewStats');
+const { getOrCreateVirtualStaff } = require('../utils/virtualStaff');
 const Business = require('../models/Business');
 const Category = require('../models/Category');
 const PlatformSettings = require('../models/PlatformSettings');
 const { customCategorySlug } = require('../utils/slugify');
+const { findDuplicateCategory } = require('../utils/categoryDedup');
 const { imageUploader, pdfUploader, finalizeUpload, verifyImageSignature, verifyPdfSignature } = require('../middleware/upload');
 
 const staffPhotoUpload = imageUploader('staff');
@@ -72,6 +74,22 @@ router.patch(
     const update = {};
     for (const field of EDITABLE_BUSINESS_FIELDS) {
       if (typeof req.body?.[field] === 'string') update[field] = req.body[field].trim();
+    }
+    if (
+      typeof req.body?.bufferMinutes === 'number' &&
+      Number.isInteger(req.body.bufferMinutes) &&
+      req.body.bufferMinutes >= 0 &&
+      req.body.bufferMinutes <= 120
+    ) {
+      update.bufferMinutes = req.body.bufferMinutes;
+    }
+    if (
+      typeof req.body?.bookingWindowDays === 'number' &&
+      Number.isInteger(req.body.bookingWindowDays) &&
+      req.body.bookingWindowDays >= 1 &&
+      req.body.bookingWindowDays <= 365
+    ) {
+      update.bookingWindowDays = req.body.bookingWindowDays;
     }
     if (req.body?.socials && typeof req.body.socials === 'object') {
       update.socials = {
@@ -358,26 +376,81 @@ router.get(
 router.post(
   '/bookings',
   asyncHandler(async (req, res) => {
-    const { serviceId, staffId, date, startTime, clientName, clientPhone, comment } = req.body || {};
+    const { serviceId, staffId, date, startTime, clientName, clientPhone, comment, quantity: rawQuantity } = req.body || {};
 
     if (
       typeof serviceId !== 'string' ||
-      typeof staffId !== 'string' ||
       typeof date !== 'string' ||
       typeof startTime !== 'string' ||
       !DATE_RE.test(date) ||
       !TIME_RE.test(startTime) ||
       typeof clientName !== 'string' ||
-      !clientName.trim()
+      !clientName.trim() ||
+      (staffId !== undefined && staffId !== '' && typeof staffId !== 'string')
     ) {
       return res.status(400).json({ error: 'INVALID_INPUT' });
     }
 
-    const [service, staff] = await Promise.all([
-      Service.findOne({ _id: serviceId, business: req.businessId, active: true }),
-      Staff.findOne({ _id: staffId, business: req.businessId, active: true }),
-    ]);
-    if (!service || !staff) return res.status(404).json({ error: 'NOT_FOUND' });
+    const quantity = rawQuantity === undefined ? 1 : Number(rawQuantity);
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 10) {
+      return res.status(400).json({ error: 'INVALID_INPUT' });
+    }
+
+    const service = await Service.findOne({ _id: serviceId, business: req.businessId, active: true });
+    if (!service) return res.status(404).json({ error: 'NOT_FOUND' });
+
+    if (quantity > 1 && service.repeatable === false) {
+      return res.status(400).json({ error: 'SERVICE_NOT_REPEATABLE' });
+    }
+
+    const durationMinutes = service.durationMinutes * quantity;
+    const price = service.isFree ? 0 : service.price * quantity;
+
+    const maxDuration = maxWorkingDayMinutes(req.businessDoc.workingHours);
+    if (maxDuration > 0 && durationMinutes > maxDuration) {
+      return res.status(400).json({ error: 'SERVICE_TOO_LONG', maxDurationMinutes: maxDuration });
+    }
+
+    let staff = null;
+    let autoAssignedStaff = false;
+    if (staffId) {
+      staff = await Staff.findOne({ _id: staffId, business: req.businessId, active: true });
+      if (!staff) return res.status(404).json({ error: 'NOT_FOUND' });
+    } else {
+      // No specific master picked — offer the slot to whichever eligible staff member
+      // is actually free for it (mirrors the client-facing auto-assign flow), falling
+      // back to the zero-staff placeholder if the business has no real staff at all.
+      autoAssignedStaff = true;
+      const staffFilter = { business: req.businessId, active: true, virtual: { $ne: true } };
+      if (service.staff?.length) staffFilter._id = { $in: service.staff };
+      const candidates = await Staff.find(staffFilter).lean();
+      for (const candidate of candidates) {
+        // eslint-disable-next-line no-await-in-loop
+        const reason = await slotUnavailableReason({
+          staff: candidate,
+          date,
+          startTime,
+          durationMinutes,
+          bufferMinutes: req.businessDoc.bufferMinutes,
+        });
+        if (!reason) {
+          staff = candidate;
+          break;
+        }
+      }
+      if (!staff && !candidates.length) {
+        const virtualStaff = await getOrCreateVirtualStaff(req.businessDoc);
+        const reason = await slotUnavailableReason({
+          staff: virtualStaff,
+          date,
+          startTime,
+          durationMinutes,
+          bufferMinutes: req.businessDoc.bufferMinutes,
+        });
+        if (!reason) staff = virtualStaff;
+      }
+      if (!staff) return res.status(409).json({ error: 'SLOT_TAKEN' });
+    }
 
     try {
       const booking = await createManualBooking({
@@ -390,6 +463,11 @@ router.post(
         clientName,
         clientPhone,
         comment,
+        durationMinutes,
+        price,
+        quantity,
+        autoAssignedStaff,
+        bufferMinutes: req.businessDoc.bufferMinutes,
       });
       res.status(201).json({ booking: applyPhoneReveal(booking.toObject()) });
     } catch (err) {
@@ -515,6 +593,7 @@ router.patch(
       startTime: booking.startTime,
       durationMinutes,
       excludeBookingId: booking._id,
+      bufferMinutes: req.businessDoc.bufferMinutes,
     });
     if (reason) return res.status(409).json({ error: reasonToErrorCode(reason) });
 
@@ -546,6 +625,7 @@ router.patch(
       startTime: booking.startTime,
       durationMinutes: booking.durationMinutes,
       excludeBookingId: booking._id,
+      bufferMinutes: req.businessDoc.bufferMinutes,
     });
     if (reason) return res.status(409).json({ error: reasonToErrorCode(reason) });
 
@@ -600,6 +680,7 @@ router.post(
           durationMinutes: booking.durationMinutes,
           session,
           excludeBookingId: booking._id,
+          bufferMinutes: req.businessDoc.bufferMinutes,
         });
         if (reason) {
           const code = reasonToErrorCode(reason);
@@ -807,7 +888,7 @@ router.get(
 router.post(
   '/services',
   asyncHandler(async (req, res) => {
-    const { name, description, price, durationMinutes, category, customCategoryName, staff, isFree, combinable } = req.body || {};
+    const { name, description, price, durationMinutes, category, customCategoryName, staff, isFree, combinable, repeatable } = req.body || {};
     const free = isFree === true;
     if (
       typeof name !== 'string' ||
@@ -831,6 +912,8 @@ router.post(
       if (typeof customCategoryName !== 'string' || !customCategoryName.trim()) {
         return res.status(400).json({ error: 'INVALID_INPUT' });
       }
+      const duplicate = await findDuplicateCategory(customCategoryName);
+      if (duplicate) return res.status(409).json({ error: 'CATEGORY_ALREADY_EXISTS', category: duplicate });
       const pendingCategory = await Category.create({
         slug: customCategorySlug(),
         name: customCategoryName.trim(),
@@ -860,6 +943,7 @@ router.post(
       category: categorySlug,
       staff: staffIds,
       combinable: combinable !== false,
+      repeatable: repeatable !== false,
     });
     res.status(201).json({ service });
   })
@@ -868,7 +952,7 @@ router.post(
 router.patch(
   '/services/:id',
   asyncHandler(async (req, res) => {
-    const allowed = ['name', 'description', 'price', 'durationMinutes', 'category', 'staff', 'isFree', 'combinable'];
+    const allowed = ['name', 'description', 'price', 'durationMinutes', 'category', 'staff', 'isFree', 'combinable', 'repeatable'];
     const update = {};
     for (const key of allowed) if (key in (req.body || {})) update[key] = req.body[key];
 

@@ -17,6 +17,11 @@ const serviceSchema = new mongoose.Schema(
     // multi-service checkout alongside other services. Defaults to true (today's
     // behavior) so existing services stay combinable without any migration.
     combinable: { type: Boolean, default: true },
+    // When false, a client can only select this service once per booking — no
+    // quantity stepper. Off by default would break existing services relying on
+    // the quantity feature, so this defaults to true; a business unchecks it for
+    // services that never make sense to repeat (e.g. one manicure per visit).
+    repeatable: { type: Boolean, default: true },
     active: { type: Boolean, default: true },
   },
   { timestamps: true }

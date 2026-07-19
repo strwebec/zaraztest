@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
-import { CalendarDays, Heart, Bell, User, LifeBuoy, LogOut } from 'lucide-react';
+import { LayoutGrid, CalendarDays, Heart, Bell, User, LifeBuoy, LogOut } from 'lucide-react';
 import { ClientSidebar } from '@/components/client/ClientSidebar';
 import { MobileBottomNav } from '@/components/shared/MobileBottomNav';
 import { useMe, useLogout, useNotifications } from '@/lib/hooks';
@@ -44,13 +44,15 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
     },
   ];
 
+  const mobileTabs = [{ href: `/${locale}`, label: t('nav.catalog'), icon: LayoutGrid }, ...tabs];
+
   if (isLoading || !data?.user || data.user.role !== 'CLIENT') return null;
 
   return (
     <div className="pb-bottom-nav-safe mx-auto flex w-full max-w-[1200px]">
       <ClientSidebar tabs={sidebarTabs} />
       <div className="flex-1 px-5 py-6 sm:px-8 lg:py-9">{children}</div>
-      <MobileBottomNav tabs={tabs} />
+      <MobileBottomNav tabs={mobileTabs} />
     </div>
   );
 }

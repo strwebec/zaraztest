@@ -50,6 +50,7 @@ async function importManualRows(business, rows, services, staffList) {
         startTime,
         clientName,
         clientPhone: clientPhone || undefined,
+        bufferMinutes: business.bufferMinutes,
       });
       row[0] = String(booking._id);
       row[8] = 'confirmed';

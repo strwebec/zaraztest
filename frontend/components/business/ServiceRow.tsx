@@ -60,7 +60,7 @@ export function ServiceRow({
         >
           {service.isFree ? t('business.free') : `${lineTotal}₴`}
         </div>
-        {selected && (
+        {selected && service.repeatable !== false && (
           <div className="flex items-center gap-2 rounded-lg border border-border bg-surface px-1.5 py-1">
             <button
               onClick={onDecrement}

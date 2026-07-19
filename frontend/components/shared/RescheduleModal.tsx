@@ -12,6 +12,7 @@ export function RescheduleModal({
   businessId,
   serviceId,
   cancellationPolicyHours,
+  bookingWindowDays = 30,
   currentDate,
   currentTime,
   onConfirm,
@@ -23,6 +24,7 @@ export function RescheduleModal({
   businessId: string;
   serviceId: string;
   cancellationPolicyHours?: number;
+  bookingWindowDays?: number;
   currentDate?: string;
   currentTime?: string;
   onConfirm: (date: string, startTime: string, staffId: string) => void;
@@ -36,7 +38,7 @@ export function RescheduleModal({
 
   const { data: availability, isLoading } = useAvailability(businessId, serviceId, date);
   const slots = availability?.slots ?? [];
-  const dates = nextDays(7);
+  const dates = nextDays(bookingWindowDays + 1);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 sm:items-center" onClick={onClose}>

@@ -26,6 +26,7 @@ const ERROR_KEY: Record<string, string> = {
   TERMS_NOT_ACCEPTED: 'auth.termsNotAccepted',
   INVALID_OR_EXPIRED_CODE: 'auth.invalidOrExpiredCode',
   TOO_MANY_ATTEMPTS: 'auth.tooManyAttempts',
+  CATEGORY_ALREADY_EXISTS: 'auth.categoryAlreadyExists',
 };
 
 type AccountType = 'client' | 'business';

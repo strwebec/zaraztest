@@ -13,7 +13,7 @@ const { requireAuth } = require('../middleware/auth');
 const { requireRole } = require('../middleware/role');
 const { reviewLimiter } = require('../middleware/rateLimit');
 const { asyncHandler } = require('../utils/asyncHandler');
-const { isSlotFree, findClientConflict } = require('../utils/availability');
+const { isSlotFree, findClientConflict, isWithinBookingWindow } = require('../utils/availability');
 const { applyClientViolation } = require('../utils/clientPenalty');
 const { applyUnfairCancellation } = require('../jobs/autoUnblock');
 const { containsStopWords } = require('../utils/stopWords');
@@ -39,7 +39,7 @@ router.get(
     const now = new Date();
 
     const all = await Booking.find({ client: req.userId })
-      .populate('business', 'name category coverPhotoUrl cancellationPolicyHours')
+      .populate('business', 'name category coverPhotoUrl cancellationPolicyHours bookingWindowDays')
       .populate('service', 'name')
       .populate('staff', 'name')
       .sort({ date: -1, startTime: -1 })
@@ -117,6 +117,9 @@ router.post(
     const booking = await Booking.findOne({ _id: req.params.id, client: req.userId }).populate('business');
     if (!booking) return res.status(404).json({ error: 'NOT_FOUND' });
     if (booking.status !== 'confirmed') return res.status(400).json({ error: 'NOT_RESCHEDULABLE' });
+    if (!isWithinBookingWindow(date, booking.business.bookingWindowDays)) {
+      return res.status(400).json({ error: 'DATE_TOO_FAR', bookingWindowDays: booking.business.bookingWindowDays });
+    }
 
     const staff = await Staff.findOne({ _id: staffId, business: booking.business._id, active: true });
     if (!staff) return res.status(404).json({ error: 'NOT_FOUND' });
@@ -135,6 +138,7 @@ router.post(
           durationMinutes: booking.durationMinutes,
           session,
           excludeBookingId: booking._id,
+          bufferMinutes: booking.business.bufferMinutes,
         });
         if (!free) {
           const err = new Error('SLOT_TAKEN');

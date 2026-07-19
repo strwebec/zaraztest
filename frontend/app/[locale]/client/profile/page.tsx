@@ -13,6 +13,7 @@ import {
   useClientStats,
   ApiError,
 } from '@/lib/hooks';
+import { InfoModal } from '@/components/shared/InfoModal';
 import { SUPPORTED_LOCALES, type Locale } from '@/lib/i18n/locales';
 
 const PASSWORD_ERROR_KEY: Record<string, string> = {
@@ -39,6 +40,7 @@ export default function ClientProfilePage() {
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [passwordSaved, setPasswordSaved] = useState(false);
+  const [showRatingInfo, setShowRatingInfo] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -129,13 +131,17 @@ export default function ClientProfilePage() {
       </div>
 
       <div className="flex gap-3">
-        <div className="flex flex-1 flex-col gap-1 rounded-2xl border border-border bg-surface p-4 shadow-xs">
+        <button
+          onClick={() => setShowRatingInfo(true)}
+          className="flex flex-1 flex-col gap-1 rounded-2xl border border-border bg-surface p-4 text-left shadow-xs transition hover:border-primary"
+        >
           <div className="flex items-baseline gap-2">
             <span className="font-mono text-2xl font-bold text-text">{(user.rating ?? 5).toFixed(1)}</span>
             <span className="text-xs font-bold uppercase tracking-wide text-text-muted">{t('client.myRating')}</span>
           </div>
           <span className="text-xs text-text-muted">{t('client.ratingHint')}</span>
-        </div>
+          <span className="text-[11px] font-semibold text-primary">{t('client.ratingHowCalculated')}</span>
+        </button>
         <div className="flex flex-1 flex-col gap-1 rounded-2xl border border-border bg-surface p-4 shadow-xs">
           <div className="flex items-baseline gap-2">
             <span className="font-mono text-2xl font-bold text-text">{stats?.completedBookings ?? 0}</span>
@@ -211,6 +217,15 @@ export default function ClientProfilePage() {
           {passwordSaved ? t('client.passwordChanged') : t('client.savePassword')}
         </button>
       </form>
+
+      {showRatingInfo && (
+        <InfoModal title={t('client.ratingInfoTitle') as string} onClose={() => setShowRatingInfo(false)}>
+          <p>{t('client.ratingInfoStart')}</p>
+          <p>{t('client.ratingInfoPenalty')}</p>
+          <p>{t('client.ratingInfoBlock')}</p>
+          <p>{t('client.ratingInfoReset')}</p>
+        </InfoModal>
+      )}
     </div>
   );
 }

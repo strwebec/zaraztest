@@ -8,7 +8,7 @@ const ProfileView = require('../models/ProfileView');
 const Review = require('../models/Review');
 const User = require('../models/User');
 const Category = require('../models/Category');
-const { computeFreeSlots } = require('../utils/availability');
+const { computeFreeSlots, isWithinBookingWindow } = require('../utils/availability');
 const { getOrCreateVirtualStaff } = require('../utils/virtualStaff');
 const { asyncHandler } = require('../utils/asyncHandler');
 const { optionalAuth } = require('../middleware/auth');
@@ -110,6 +110,7 @@ router.get(
               staff,
               date: targetDate,
               durationMinutes: cheapest.durationMinutes,
+              bufferMinutes: biz.bufferMinutes,
             });
             if (slots.length) {
               nextSlot = slots[0];
@@ -223,6 +224,9 @@ router.get(
 
     const business = await Business.findById(req.params.id).lean();
     if (!business) return res.status(404).json({ error: 'NOT_FOUND' });
+    if (!isWithinBookingWindow(date, business.bookingWindowDays ?? 30)) {
+      return res.json({ date, slots: [] });
+    }
 
     const staffIds = service.staff?.length ? service.staff : null;
     const staffFilter = { business: req.params.id, active: true, virtual: { $ne: true } };
@@ -232,7 +236,7 @@ router.get(
 
     const slotToStaff = new Map();
     for (const staff of staffList) {
-      const slots = await computeFreeSlots({ staff, date, durationMinutes: service.durationMinutes });
+      const slots = await computeFreeSlots({ staff, date, durationMinutes: service.durationMinutes, bufferMinutes: business.bufferMinutes });
       for (const time of slots) {
         if (!slotToStaff.has(time)) slotToStaff.set(time, staff._id);
       }
@@ -273,6 +277,9 @@ router.get(
 
     const business = await Business.findById(req.params.id).lean();
     if (!business) return res.status(404).json({ error: 'NOT_FOUND' });
+    if (!isWithinBookingWindow(date, business.bookingWindowDays ?? 30)) {
+      return res.json({ date, slots: [], totalDuration });
+    }
 
     // A service with an empty staff list means "any active staff can do it" — only
     // intersect down for services that actually restrict who can perform them.
@@ -290,7 +297,7 @@ router.get(
 
     const slotToStaff = new Map();
     for (const staff of staffList) {
-      const slots = await computeFreeSlots({ staff, date, durationMinutes: totalDuration });
+      const slots = await computeFreeSlots({ staff, date, durationMinutes: totalDuration, bufferMinutes: business.bufferMinutes });
       for (const time of slots) {
         if (!slotToStaff.has(time)) slotToStaff.set(time, staff._id);
       }

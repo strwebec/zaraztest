@@ -157,25 +157,31 @@ export default function AdminReviewsPage() {
                       rows={2}
                       className="resize-none rounded-lg border border-border bg-bg px-3 py-2 text-xs text-text outline-none focus:border-primary"
                     />
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() =>
-                          resolveDispute.mutate({ id: r._id, decision: 'UPHELD', note: noteByReview[r._id] })
-                        }
-                        disabled={resolveDispute.isPending}
-                        className="rounded-lg bg-success px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
-                      >
-                        {t('admin.disputeUphold')}
-                      </button>
-                      <button
-                        onClick={() =>
-                          resolveDispute.mutate({ id: r._id, decision: 'DISMISSED', note: noteByReview[r._id] })
-                        }
-                        disabled={resolveDispute.isPending}
-                        className="rounded-lg border border-danger/40 px-4 py-1.5 text-xs font-semibold text-danger disabled:opacity-50"
-                      >
-                        {t('admin.disputeDismiss')}
-                      </button>
+                    <div className="flex flex-wrap gap-3">
+                      <div className="flex flex-col gap-1">
+                        <button
+                          onClick={() =>
+                            resolveDispute.mutate({ id: r._id, decision: 'UPHELD', note: noteByReview[r._id] })
+                          }
+                          disabled={resolveDispute.isPending}
+                          className="rounded-lg bg-success px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                        >
+                          {t('admin.disputeUphold')}
+                        </button>
+                        <span className="text-[11px] text-text-muted">{t('admin.disputeUpholdOutcome')}</span>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <button
+                          onClick={() =>
+                            resolveDispute.mutate({ id: r._id, decision: 'DISMISSED', note: noteByReview[r._id] })
+                          }
+                          disabled={resolveDispute.isPending}
+                          className="rounded-lg border border-danger/40 px-4 py-1.5 text-xs font-semibold text-danger disabled:opacity-50"
+                        >
+                          {t('admin.disputeDismiss')}
+                        </button>
+                        <span className="text-[11px] text-text-muted">{t('admin.disputeDismissOutcome')}</span>
+                      </div>
                     </div>
                   </div>
                 )}

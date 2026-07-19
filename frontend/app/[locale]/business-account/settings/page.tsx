@@ -147,6 +147,106 @@ function WorkingHoursEditor({ business }: { business: BusinessDetail }) {
   );
 }
 
+const BUFFER_OPTIONS = [0, 5, 10, 15, 20, 30];
+
+function BufferTimeEditor({ business }: { business: BusinessDetail }) {
+  const { t } = useTranslation();
+  const updateMe = useUpdateBusinessMe();
+  const [value, setValue] = useState(business.bufferMinutes ?? 0);
+  const [saved, setSaved] = useState(false);
+
+  return (
+    <section className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      <h2 className="text-xs font-bold uppercase tracking-wide text-text-muted">{t('biz.bufferTimeTitle')}</h2>
+      <p className="text-xs text-text-muted">{t('biz.bufferTimeHint')}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        {BUFFER_OPTIONS.map((minutes) => (
+          <button
+            key={minutes}
+            type="button"
+            onClick={() => setValue(minutes)}
+            className={`rounded-lg px-4 py-1.5 text-xs font-semibold transition ${
+              value === minutes ? 'bg-primary text-white' : 'border border-border text-text-muted hover:border-primary'
+            }`}
+          >
+            {minutes === 0 ? t('biz.bufferTimeNone') : t('biz.bufferTimeMinutes', { count: minutes })}
+          </button>
+        ))}
+      </div>
+      <div className="mt-1 flex items-center gap-3">
+        <button
+          onClick={() =>
+            updateMe.mutate(
+              { bufferMinutes: value },
+              {
+                onSuccess: () => {
+                  setSaved(true);
+                  setTimeout(() => setSaved(false), 2500);
+                },
+              }
+            )
+          }
+          disabled={updateMe.isPending}
+          className="self-start rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-white disabled:opacity-60"
+        >
+          {t('biz.save')}
+        </button>
+        {saved && <span className="text-xs text-success">{t('biz.settingsSaved')}</span>}
+      </div>
+    </section>
+  );
+}
+
+const BOOKING_WINDOW_OPTIONS = [7, 14, 21, 30, 60, 90];
+
+function BookingWindowEditor({ business }: { business: BusinessDetail }) {
+  const { t } = useTranslation();
+  const updateMe = useUpdateBusinessMe();
+  const [value, setValue] = useState(business.bookingWindowDays ?? 30);
+  const [saved, setSaved] = useState(false);
+
+  return (
+    <section className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      <h2 className="text-xs font-bold uppercase tracking-wide text-text-muted">{t('biz.bookingWindowTitle')}</h2>
+      <p className="text-xs text-text-muted">{t('biz.bookingWindowHint')}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        {BOOKING_WINDOW_OPTIONS.map((days) => (
+          <button
+            key={days}
+            type="button"
+            onClick={() => setValue(days)}
+            className={`rounded-lg px-4 py-1.5 text-xs font-semibold transition ${
+              value === days ? 'bg-primary text-white' : 'border border-border text-text-muted hover:border-primary'
+            }`}
+          >
+            {t('biz.bookingWindowDays', { count: days })}
+          </button>
+        ))}
+      </div>
+      <div className="mt-1 flex items-center gap-3">
+        <button
+          onClick={() =>
+            updateMe.mutate(
+              { bookingWindowDays: value },
+              {
+                onSuccess: () => {
+                  setSaved(true);
+                  setTimeout(() => setSaved(false), 2500);
+                },
+              }
+            )
+          }
+          disabled={updateMe.isPending}
+          className="self-start rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-white disabled:opacity-60"
+        >
+          {t('biz.save')}
+        </button>
+        {saved && <span className="text-xs text-success">{t('biz.settingsSaved')}</span>}
+      </div>
+    </section>
+  );
+}
+
 export default function BusinessSettingsPage() {
   const { t } = useTranslation();
   const { data, isLoading } = useBusinessMe();
@@ -234,6 +334,10 @@ export default function BusinessSettingsPage() {
       </section>
 
       {business && <WorkingHoursEditor business={business} />}
+
+      {business && <BufferTimeEditor business={business} />}
+
+      {business && <BookingWindowEditor business={business} />}
 
       <section className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
         <h2 className="text-xs font-bold uppercase tracking-wide text-text-muted">{t('biz.settingsCoverPhoto')}</h2>

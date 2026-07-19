@@ -7,6 +7,7 @@ const Business = require('../models/Business');
 const City = require('../models/City');
 const Category = require('../models/Category');
 const { customCategorySlug } = require('../utils/slugify');
+const { findDuplicateCategory } = require('../utils/categoryDedup');
 const { sendMail } = require('../utils/mailer');
 const {
   signAccessToken,
@@ -133,6 +134,8 @@ router.post('/register/business', registerLimiter, asyncHandler(async (req, res)
   let categorySlug = category;
   let pendingCategory = null;
   if (category === 'other') {
+    const duplicate = await findDuplicateCategory(customCategoryName);
+    if (duplicate) return res.status(409).json({ error: 'CATEGORY_ALREADY_EXISTS', category: duplicate });
     pendingCategory = await Category.create({
       slug: customCategorySlug(),
       name: customCategoryName.trim(),

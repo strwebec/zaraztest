@@ -18,6 +18,7 @@ export function BookingPanel({
   confirmDisabled,
   confirmLabel,
   cancellationHours,
+  bookingWindowDays = 30,
   comment,
   onCommentChange,
   className = '',
@@ -33,12 +34,13 @@ export function BookingPanel({
   confirmDisabled: boolean;
   confirmLabel: string;
   cancellationHours?: number;
+  bookingWindowDays?: number;
   comment: string;
   onCommentChange: (value: string) => void;
   className?: string;
 }) {
   const { t } = useTranslation();
-  const dates = nextDays(7);
+  const dates = nextDays(bookingWindowDays + 1);
 
   return (
     <div className={`flex flex-col gap-4 ${className}`}>

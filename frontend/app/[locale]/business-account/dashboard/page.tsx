@@ -1,10 +1,12 @@
 'use client';
 
+import { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { ArrowRight, CalendarPlus, Sparkles } from 'lucide-react';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { TopPromotionCard } from '@/components/business/TopPromotionCard';
+import { InfoModal } from '@/components/shared/InfoModal';
 import { useBusinessMe, useBusinessStats, useBusinessBookings } from '@/lib/hooks';
 import { toDateKey } from '@/lib/utils/dates';
 import { freeCommissionDaysLeft } from '@/lib/utils/commission';
@@ -24,6 +26,7 @@ export default function BusinessDashboardPage() {
   const { locale } = useParams<{ locale: Locale }>();
   const { data: bizData } = useBusinessMe();
   const { data: stats, isLoading } = useBusinessStats();
+  const [showRatingInfo, setShowRatingInfo] = useState(false);
   const today = toDateKey(new Date());
   const { data: bookingsData, isLoading: bookingsLoading } = useBusinessBookings(today);
 
@@ -141,14 +144,26 @@ export default function BusinessDashboardPage() {
 
         <div className="flex flex-col gap-5">
           {stats && (
-            <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+            <button
+              onClick={() => setShowRatingInfo(true)}
+              className="rounded-2xl border border-border bg-surface p-5 text-left shadow-sm transition hover:border-primary"
+            >
               <div className="mb-2 text-[13px] font-medium text-text-muted">{t('biz.rating')}</div>
               <div className="font-mono font-tabular text-2xl font-bold text-text">{stats.rating.toFixed(1)}</div>
-            </div>
+              <div className="mt-1 text-[11px] font-semibold text-primary">{t('biz.ratingHowCalculated')}</div>
+            </button>
           )}
           <TopPromotionCard />
         </div>
       </div>
+
+      {showRatingInfo && (
+        <InfoModal title={t('biz.ratingInfoTitle') as string} onClose={() => setShowRatingInfo(false)}>
+          <p>{t('biz.ratingInfoFormula')}</p>
+          <p>{t('biz.ratingInfoPlatform')}</p>
+          <p>{t('biz.ratingInfoGoogle')}</p>
+        </InfoModal>
+      )}
     </div>
   );
 }

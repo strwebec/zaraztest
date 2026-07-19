@@ -34,6 +34,15 @@ const businessSchema = new mongoose.Schema(
 
     cancellationPolicyHours: { type: Number, enum: [12, 24, 48], default: 24 },
 
+    // Gap enforced after every booking (e.g. 5 min for a client to pay/leave before the
+    // next one starts) — padded onto each existing booking's busy window when computing
+    // availability, so it applies automatically without touching the booking's own duration.
+    bufferMinutes: { type: Number, default: 0, min: 0, max: 120 },
+
+    // How many days into the future a client may book — the client-facing date picker
+    // only offers this many days (today inclusive), and booking creation is rejected past it.
+    bookingWindowDays: { type: Number, default: 30, min: 1, max: 365 },
+
     // Business-level default hours — the ceiling every service's duration and every
     // staff member's own schedule should fit within. Distinct from Staff.schedule,
     // which lets an individual master work fewer/different hours than this bound.

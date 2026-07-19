@@ -21,6 +21,10 @@ const bookingSchema = new mongoose.Schema(
     durationMinutes: { type: Number, required: true },
     price: { type: Number, required: true }, // snapshot of service price at booking time
     isFree: { type: Boolean, default: false }, // snapshot of service.isFree at booking time
+    // How many units of a repeatable service this booking covers (e.g. a 30-min
+    // massage booked ×3 back-to-back as one 90-min reservation) — durationMinutes
+    // and price above already reflect the total, this is purely for display.
+    quantity: { type: Number, default: 1 },
 
     source: { type: String, enum: ['platform', 'manual'], default: 'platform' },
     status: {

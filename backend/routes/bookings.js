@@ -13,6 +13,7 @@ const {
   findClientConflict,
   timeToMinutes,
   minutesToTime,
+  isWithinBookingWindow,
 } = require('../utils/availability');
 const { requireAuth } = require('../middleware/auth');
 const { requireRole } = require('../middleware/role');
@@ -58,6 +59,9 @@ router.post('/', requireAuth, requireRole('CLIENT'), bookingLimiter, asyncHandle
     Staff.findOne({ _id: staffId, business: businessId, active: true }),
   ]);
   if (!business || !service || !staff) return res.status(404).json({ error: 'NOT_FOUND' });
+  if (!isWithinBookingWindow(date, business.bookingWindowDays)) {
+    return res.status(400).json({ error: 'DATE_TOO_FAR', bookingWindowDays: business.bookingWindowDays });
+  }
 
   const session = await mongoose.startSession();
   try {
@@ -69,6 +73,7 @@ router.post('/', requireAuth, requireRole('CLIENT'), bookingLimiter, asyncHandle
         startTime,
         durationMinutes: service.durationMinutes,
         session,
+        bufferMinutes: business.bufferMinutes,
       });
       if (reason) {
         const code = reasonToErrorCode(reason);
@@ -202,6 +207,9 @@ router.post('/group', requireAuth, requireRole('CLIENT'), bookingLimiter, asyncH
     Service.find({ _id: { $in: uniqueServiceIds }, business: businessId, active: true }).lean(),
   ]);
   if (!business || !staff || services.length !== uniqueServiceIds.length) return res.status(404).json({ error: 'NOT_FOUND' });
+  if (!isWithinBookingWindow(date, business.bookingWindowDays)) {
+    return res.status(400).json({ error: 'DATE_TOO_FAR', bookingWindowDays: business.bookingWindowDays });
+  }
 
   // Preserve the order (and repeats) the client selected them in, not Mongo's $in order.
   const byId = new Map(services.map((s) => [String(s._id), s]));
@@ -216,13 +224,32 @@ router.post('/group', requireAuth, requireRole('CLIENT'), bookingLimiter, asyncH
     return res.status(400).json({ error: 'SERVICE_NOT_COMBINABLE' });
   }
 
+  // A non-repeatable service (e.g. a single manicure that never makes sense to book
+  // twice in one visit) can't appear more than once, even though the UI already hides
+  // the stepper for it — this is the server-side backstop.
+  const counts = new Map();
+  for (const id of serviceIds) counts.set(id, (counts.get(id) ?? 0) + 1);
+  const hasNonRepeatableRepeat = [...counts.entries()].some(
+    ([id, count]) => count > 1 && byId.get(id).repeatable === false
+  );
+  if (hasNonRepeatableRepeat) {
+    return res.status(400).json({ error: 'SERVICE_NOT_REPEATABLE' });
+  }
+
   const totalDuration = orderedServices.reduce((sum, s) => sum + s.durationMinutes, 0);
 
   const session = await mongoose.startSession();
   try {
     let bookings;
     await session.withTransaction(async () => {
-      const reason = await slotUnavailableReason({ staff, date, startTime, durationMinutes: totalDuration, session });
+      const reason = await slotUnavailableReason({
+        staff,
+        date,
+        startTime,
+        durationMinutes: totalDuration,
+        session,
+        bufferMinutes: business.bufferMinutes,
+      });
       if (reason) {
         const code = reasonToErrorCode(reason);
         const err = new Error(code);

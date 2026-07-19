@@ -153,6 +153,11 @@ export default function BusinessProfilePage() {
         setFeedback({ type: 'error', message: t('business.staffCannotPerformCombo') });
       } else if (err instanceof ApiError && err.code === 'SERVICE_NOT_COMBINABLE') {
         setFeedback({ type: 'error', message: t('biz.serviceNotCombinable') });
+      } else if (err instanceof ApiError && err.code === 'SERVICE_NOT_REPEATABLE') {
+        setFeedback({ type: 'error', message: t('business.serviceNotRepeatable') });
+      } else if (err instanceof ApiError && err.code === 'DATE_TOO_FAR') {
+        const days = (err.data?.bookingWindowDays as number | undefined) ?? business.bookingWindowDays ?? 30;
+        setFeedback({ type: 'error', message: t('business.dateTooFar', { days }) });
       } else if (err instanceof ApiError && err.code === 'ACCOUNT_BLOCKED') {
         const until = err.data?.until ? new Date(err.data.until as string).toLocaleString() : '';
         setFeedback({ type: 'error', message: t('auth.accountBlocked', { until }) });
@@ -204,6 +209,7 @@ export default function BusinessProfilePage() {
         confirmDisabled={confirmDisabled}
         confirmLabel={confirmLabel}
         cancellationHours={business.cancellationPolicyHours}
+        bookingWindowDays={business.bookingWindowDays ?? 30}
         comment={comment}
         onCommentChange={setComment}
       />

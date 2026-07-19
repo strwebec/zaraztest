@@ -13,6 +13,7 @@ const { runDailySweep } = require('./jobs/autoUnblock');
 const { sendDailyPaymentReminders } = require('./jobs/paymentReminders');
 const { runTopPlacementActivation } = require('./jobs/topPlacementActivation');
 const { runSheetsSync } = require('./jobs/sheetsSync');
+const { runAutoCompleteBookings } = require('./jobs/autoCompleteBookings');
 
 const authRoutes = require('./routes/auth');
 const catalogRoutes = require('./routes/catalog');
@@ -145,6 +146,13 @@ connectDB()
     // silently if GOOGLE_SHEETS_CLIENT_EMAIL/GOOGLE_SHEETS_PRIVATE_KEY aren't set.
     cron.schedule('*/5 * * * *', () => {
       runSheetsSync().catch((err) => console.error('[cron] sheetsSync failed', err));
+    });
+
+    // Every 5 minutes: auto-complete confirmed bookings whose scheduled end time has
+    // passed without the business marking them completed/no-show/cancelled — keeps
+    // revenue/analytics/rating "live" instead of depending on someone clicking a button.
+    cron.schedule('*/5 * * * *', () => {
+      runAutoCompleteBookings().catch((err) => console.error('[cron] autoCompleteBookings failed', err));
     });
   })
   .catch((err) => {

@@ -16,12 +16,26 @@ async function createManualBooking({
   clientName,
   clientPhone,
   comment,
+  durationMinutes,
+  price,
+  quantity,
+  autoAssignedStaff,
+  bufferMinutes,
 }) {
+  const effectiveDuration = durationMinutes ?? service.durationMinutes;
+  const effectivePrice = price ?? service.price;
   const session = await mongoose.startSession();
   try {
     let booking;
     await session.withTransaction(async () => {
-      const reason = await slotUnavailableReason({ staff, date, startTime, durationMinutes: service.durationMinutes, session });
+      const reason = await slotUnavailableReason({
+        staff,
+        date,
+        startTime,
+        durationMinutes: effectiveDuration,
+        session,
+        bufferMinutes,
+      });
       if (reason) {
         const code = reasonToErrorCode(reason);
         const err = new Error(code);
@@ -39,9 +53,11 @@ async function createManualBooking({
             staff: staff._id,
             date,
             startTime,
-            durationMinutes: service.durationMinutes,
-            price: service.price,
+            durationMinutes: effectiveDuration,
+            price: effectivePrice,
             isFree: !!service.isFree,
+            quantity: quantity ?? 1,
+            autoAssignedStaff: !!autoAssignedStaff,
             source: 'manual',
             status: 'confirmed',
             comment,

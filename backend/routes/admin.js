@@ -25,6 +25,7 @@ const { runSheetsSync } = require('../jobs/sheetsSync');
 const { recomputeBusinessReviewStats } = require('../utils/reviewStats');
 const { logAdminAction } = require('../utils/auditLog');
 const { customCategorySlug } = require('../utils/slugify');
+const { findDuplicateCategory } = require('../utils/categoryDedup');
 const AdminAuditLog = require('../models/AdminAuditLog');
 
 const router = express.Router();
@@ -776,7 +777,8 @@ router.get(
 
     const categories = await Category.find(filter)
       .populate('requestedByBusiness', 'name')
-      .sort({ createdAt: -1 })
+      .collation({ locale: 'uk', strength: 1 })
+      .sort({ name: 1 })
       .lean();
     res.json({ categories });
   })
@@ -792,6 +794,9 @@ router.post(
     if (typeof name !== 'string' || !name.trim() || typeof nameEn !== 'string' || !nameEn.trim()) {
       return res.status(400).json({ error: 'INVALID_INPUT' });
     }
+
+    const duplicate = (await findDuplicateCategory(name)) || (await findDuplicateCategory(nameEn));
+    if (duplicate) return res.status(409).json({ error: 'CATEGORY_ALREADY_EXISTS', category: duplicate });
 
     const category = await Category.create({
       slug: customCategorySlug(),

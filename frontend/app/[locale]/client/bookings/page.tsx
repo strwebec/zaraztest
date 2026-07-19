@@ -160,6 +160,9 @@ export default function ClientBookingsPage() {
             service: conflict.serviceName ?? '',
           })
         );
+      } else if (err instanceof ApiError && err.code === 'DATE_TOO_FAR') {
+        const days = (err.data?.bookingWindowDays as number | undefined) ?? reschedulingBooking?.business.bookingWindowDays ?? 30;
+        setRescheduleError(t('business.dateTooFar', { days }));
       } else setRescheduleError(t('auth.genericError'));
     }
   }
@@ -294,6 +297,7 @@ export default function ClientBookingsPage() {
           businessId={reschedulingBooking.business._id}
           serviceId={reschedulingBooking.service._id}
           cancellationPolicyHours={reschedulingBooking.business.cancellationPolicyHours}
+          bookingWindowDays={reschedulingBooking.business.bookingWindowDays ?? 30}
           currentDate={reschedulingBooking.date}
           currentTime={reschedulingBooking.startTime}
           onConfirm={handleReschedule}

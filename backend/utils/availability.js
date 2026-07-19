@@ -22,6 +22,20 @@ function dayKeyForDate(dateStr) {
 }
 
 /**
+ * Whether dateStr falls within [today, today + windowDays] — the client-facing advance
+ * booking window a business configures (Business.bookingWindowDays). Today itself always
+ * counts as day 0, so windowDays=1 allows booking today or tomorrow, matching the same
+ * inclusive range the frontend date picker offers.
+ */
+function isWithinBookingWindow(dateStr, windowDays) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const target = new Date(`${dateStr}T00:00:00`);
+  const diffDays = Math.round((target.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+  return diffDays >= 0 && diffDays <= windowDays;
+}
+
+/**
  * A service can never be booked if it doesn't fit inside at least one working day —
  * so the cap is the longest single non-day-off day in the week, not an average or a
  * sum. A lunch break splits a day into two segments a service can't span, so the cap
@@ -81,8 +95,10 @@ function overlapsBreak(window, startMin, endMin) {
  * Computes free slots for a staff member on a given date for a service of durationMinutes.
  * A slot at time T is free if [T, T+duration) does not overlap any existing confirmed booking
  * for that staff on that date, and does not overlap the day's lunch break, if any.
+ * bufferMinutes (from Business.bufferMinutes) pads each existing booking's busy window on
+ * its end so a new slot can't start right up against the previous one.
  */
-async function computeFreeSlots({ staff, date, durationMinutes, stepMinutes = DEFAULT_SLOT_STEP_MINUTES }) {
+async function computeFreeSlots({ staff, date, durationMinutes, stepMinutes = DEFAULT_SLOT_STEP_MINUTES, bufferMinutes = 0 }) {
   const window = getWorkingWindow(staff, date);
   if (!window) return [];
 
@@ -97,7 +113,7 @@ async function computeFreeSlots({ staff, date, durationMinutes, stepMinutes = DE
 
   const busyRanges = existing.map((b) => {
     const s = timeToMinutes(b.startTime);
-    return [s, s + b.durationMinutes];
+    return [s - bufferMinutes, s + b.durationMinutes + bufferMinutes];
   });
 
   const slots = [];
@@ -114,8 +130,10 @@ async function computeFreeSlots({ staff, date, durationMinutes, stepMinutes = DE
  * staff's working hours (or a day off), during the lunch break, vs an actual
  * overlapping booking — so callers can return a precise error instead of a blanket
  * "slot taken" for a case that has nothing to do with another booking.
+ * bufferMinutes (from Business.bufferMinutes) pads each existing booking on both sides
+ * so a candidate slot can't be scheduled closer than that gap to it either way.
  */
-async function slotUnavailableReason({ staff, date, startTime, durationMinutes, session, excludeBookingId }) {
+async function slotUnavailableReason({ staff, date, startTime, durationMinutes, session, excludeBookingId, bufferMinutes = 0 }) {
   const window = getWorkingWindow(staff, date);
   if (!window) return 'OUTSIDE_HOURS';
 
@@ -137,8 +155,7 @@ async function slotUnavailableReason({ staff, date, startTime, durationMinutes, 
 
   const overlaps = existing.some((b) => {
     const bs = timeToMinutes(b.startTime);
-    const be = bs + b.durationMinutes;
-    return slotStart < be && slotEnd > bs;
+    return slotStart < bs + b.durationMinutes + bufferMinutes && slotEnd > bs - bufferMinutes;
   });
   return overlaps ? 'TAKEN' : null;
 }
@@ -195,6 +212,7 @@ module.exports = {
   slotUnavailableReason,
   reasonToErrorCode,
   findClientConflict,
+  isWithinBookingWindow,
   getWorkingWindow,
   overlapsBreak,
   timeToMinutes,

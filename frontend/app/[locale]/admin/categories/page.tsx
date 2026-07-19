@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { RequireAdminRole } from '@/components/admin/RequireAdminRole';
-import { useAdminCategories, useApproveCategory, useRejectCategory, useCreateCategory } from '@/lib/hooks';
+import { useAdminCategories, useApproveCategory, useRejectCategory, useCreateCategory, ApiError } from '@/lib/hooks';
 
 type Tab = 'PENDING' | 'ACTIVE' | 'REJECTED' | 'ALL';
 
@@ -44,8 +44,12 @@ export default function AdminCategoriesPage() {
       setName('');
       setNameEn('');
       setShowForm(false);
-    } catch {
-      setCreateError(t('auth.genericError') as string);
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'CATEGORY_ALREADY_EXISTS') {
+        setCreateError(t('biz.categoryAlreadyExists') as string);
+      } else {
+        setCreateError(t('auth.genericError') as string);
+      }
     }
   }
 

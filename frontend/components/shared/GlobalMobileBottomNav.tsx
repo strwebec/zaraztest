@@ -2,7 +2,7 @@
 
 import { usePathname, useParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
-import { CalendarDays, Heart, Bell, User } from 'lucide-react';
+import { LayoutGrid, CalendarDays, Heart, Bell, User } from 'lucide-react';
 import { MobileBottomNav } from './MobileBottomNav';
 import { useMe, useNotifications } from '@/lib/hooks';
 import type { Locale } from '@/lib/i18n';
@@ -30,6 +30,7 @@ export function GlobalMobileBottomNav() {
   if (EXCLUDED_PREFIXES.some((prefix) => withoutLocale.startsWith(prefix))) return null;
 
   const tabs = [
+    { href: `/${locale}`, label: t('nav.catalog') as string, icon: LayoutGrid },
     { href: `/${locale}/client/bookings`, label: t('client.bookings') as string, icon: CalendarDays },
     { href: `/${locale}/client/favorites`, label: t('client.favorites') as string, icon: Heart },
     { href: `/${locale}/client/notifications`, label: t('client.notifications') as string, icon: Bell, badge: unreadCount },
