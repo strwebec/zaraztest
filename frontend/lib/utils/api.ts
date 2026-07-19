@@ -144,8 +144,8 @@ function apiPatch<T>(path: string, body?: unknown) {
   return apiSend<T>('PATCH', path, body);
 }
 
-function apiDelete<T>(path: string) {
-  return apiSend<T>('DELETE', path);
+function apiDelete<T>(path: string, body?: unknown) {
+  return apiSend<T>('DELETE', path, body);
 }
 
 async function apiUpload<T>(path: string, formData: FormData, retried = false): Promise<T> {
@@ -1037,8 +1037,11 @@ export function rejectAdminCategory(id: string) {
   return apiPost<{ category: AdminCategory }>(`/admin/categories/${id}/reject`);
 }
 
-export function deleteAdminCategory(id: string) {
-  return apiDelete<{ ok: boolean }>(`/admin/categories/${id}`);
+export function deleteAdminCategory(id: string, reassignTo?: string) {
+  return apiDelete<{ ok: boolean; businessesMoved?: number; servicesMoved?: number }>(
+    `/admin/categories/${id}`,
+    reassignTo ? { reassignTo } : undefined
+  );
 }
 
 export type AdminAuditLogEntry = {

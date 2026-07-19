@@ -815,7 +815,14 @@ export function useRejectCategory() {
 }
 
 export function useDeleteCategory() {
-  return useAdminCategoryMutation(deleteAdminCategory);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, reassignTo }: { id: string; reassignTo?: string }) => deleteAdminCategory(id, reassignTo),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-categories'] });
+      qc.invalidateQueries({ queryKey: ['categories'] });
+    },
+  });
 }
 
 function useAdminBusinessMutation(fn: (id: string) => Promise<unknown>) {

@@ -545,7 +545,9 @@
     "categoryTabAll": "Всі",
     "deleteCategory": "Видалити",
     "deleteCategoryConfirm": "Видалити категорію «{{name}}»? Цю дію не можна скасувати.",
-    "categoryInUse": "Не можна видалити — категорію використовують {{businesses}} закладів і {{services}} послуг. Спочатку перенесіть їх в іншу категорію.",
+    "categoryInUse": "Не можна видалити — категорію використовують {{businesses}} закладів і {{services}} послуг. Оберіть категорію нижче, щоб перенести їх туди і видалити цю.",
+    "mergeTargetPlaceholder": "Перенести в категорію...",
+    "mergeAndDelete": "Об'єднати і видалити",
     "categoryStatus": {
       "ACTIVE": "Активна",
       "PENDING": "На розгляді",

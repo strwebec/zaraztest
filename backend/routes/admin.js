@@ -812,13 +812,39 @@ router.post(
 // Super-admin only (not the general 'categories' bucket moderators also get) since
 // deleting is destructive and irreversible, unlike approve/reject which just toggle
 // status. Blocked while any business or service still references the category's slug
-// so removing a duplicate can't silently orphan real listings — reassign them first.
+// so removing a duplicate can't silently orphan real listings — pass reassignTo (another
+// category's id) to bulk-move every business/service off this slug onto the target's
+// first, then delete. This is the real fix for duplicate categories that predate the
+// dedup check: a business's services can end up scattered across several near-identical
+// categories created one at a time before that check existed, so a single-category
+// delete alone can't clean that up — every duplicate needs to be merged into the one
+// survivor.
 router.delete(
   '/categories/:id',
   onlySuperAdmin,
   asyncHandler(async (req, res) => {
     const category = await Category.findById(req.params.id);
     if (!category) return res.status(404).json({ error: 'NOT_FOUND' });
+
+    const { reassignTo } = req.body || {};
+    if (typeof reassignTo === 'string' && reassignTo) {
+      if (reassignTo === category.slug) return res.status(400).json({ error: 'INVALID_INPUT' });
+      const target = await Category.findOne({ slug: reassignTo });
+      if (!target) return res.status(404).json({ error: 'REASSIGN_TARGET_NOT_FOUND' });
+
+      const [{ modifiedCount: businessesMoved }, { modifiedCount: servicesMoved }] = await Promise.all([
+        Business.updateMany({ category: category.slug }, { $set: { category: target.slug } }),
+        Service.updateMany({ category: category.slug }, { $set: { category: target.slug } }),
+      ]);
+      await category.deleteOne();
+      await logAdminAction(req, {
+        action: 'category.delete',
+        targetType: 'Category',
+        targetId: category._id,
+        targetLabel: `${category.name} → merged into ${target.name} (${businessesMoved} businesses, ${servicesMoved} services)`,
+      });
+      return res.json({ ok: true, businessesMoved, servicesMoved });
+    }
 
     const [businessCount, serviceCount] = await Promise.all([
       Business.countDocuments({ category: category.slug }),

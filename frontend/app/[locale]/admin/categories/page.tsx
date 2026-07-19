@@ -20,6 +20,7 @@ export default function AdminCategoriesPage() {
   const isSuperAdmin = meData?.user?.role === 'SUPER_ADMIN';
   const [tab, setTab] = useState<Tab>('PENDING');
   const { data, isLoading } = useAdminCategories(tab);
+  const { data: activeCategoriesData } = useAdminCategories('ACTIVE');
   const approve = useApproveCategory();
   const reject = useRejectCategory();
   const createCategory = useCreateCategory();
@@ -30,25 +31,29 @@ export default function AdminCategoriesPage() {
   const [nameEn, setNameEn] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
   const [deleteErrorById, setDeleteErrorById] = useState<Record<string, string>>({});
+  const [mergeTargetById, setMergeTargetById] = useState<Record<string, string>>({});
 
-  function handleDelete(id: string, name: string) {
-    if (!window.confirm(t('admin.deleteCategoryConfirm', { name }) as string)) return;
+  function handleDelete(id: string, name: string, reassignTo?: string) {
+    if (!reassignTo && !window.confirm(t('admin.deleteCategoryConfirm', { name }) as string)) return;
     setDeleteErrorById((prev) => {
       const { [id]: _removed, ...rest } = prev;
       return rest;
     });
-    deleteCategory.mutate(id, {
-      onError: (err) => {
-        const message =
-          err instanceof ApiError && err.code === 'CATEGORY_IN_USE'
-            ? (t('admin.categoryInUse', {
-                businesses: (err.data?.businessCount as number) ?? 0,
-                services: (err.data?.serviceCount as number) ?? 0,
-              }) as string)
-            : (t('auth.genericError') as string);
-        setDeleteErrorById((prev) => ({ ...prev, [id]: message }));
-      },
-    });
+    deleteCategory.mutate(
+      { id, reassignTo },
+      {
+        onError: (err) => {
+          const message =
+            err instanceof ApiError && err.code === 'CATEGORY_IN_USE'
+              ? (t('admin.categoryInUse', {
+                  businesses: (err.data?.businessCount as number) ?? 0,
+                  services: (err.data?.serviceCount as number) ?? 0,
+                }) as string)
+              : (t('auth.genericError') as string);
+          setDeleteErrorById((prev) => ({ ...prev, [id]: message }));
+        },
+      }
+    );
   }
 
   const categories = data?.categories ?? [];
@@ -183,7 +188,34 @@ export default function AdminCategoriesPage() {
                     )}
                   </div>
                 </div>
-                {deleteErrorById[cat._id] && <p className="text-xs text-danger">{deleteErrorById[cat._id]}</p>}
+                {deleteErrorById[cat._id] && (
+                  <div className="flex flex-col gap-2 rounded-xl bg-danger/5 p-3">
+                    <p className="text-xs text-danger">{deleteErrorById[cat._id]}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        value={mergeTargetById[cat._id] ?? ''}
+                        onChange={(e) => setMergeTargetById((prev) => ({ ...prev, [cat._id]: e.target.value }))}
+                        className="rounded-lg border border-border bg-bg px-3 py-1.5 text-xs text-text outline-none focus:border-primary"
+                      >
+                        <option value="">{t('admin.mergeTargetPlaceholder')}</option>
+                        {(activeCategoriesData?.categories ?? [])
+                          .filter((c) => c._id !== cat._id)
+                          .map((c) => (
+                            <option key={c._id} value={c.slug}>
+                              {c.name}
+                            </option>
+                          ))}
+                      </select>
+                      <button
+                        onClick={() => mergeTargetById[cat._id] && handleDelete(cat._id, cat.name, mergeTargetById[cat._id])}
+                        disabled={!mergeTargetById[cat._id] || deleteCategory.isPending}
+                        className="rounded-lg bg-primary px-4 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                      >
+                        {t('admin.mergeAndDelete')}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
         </div>

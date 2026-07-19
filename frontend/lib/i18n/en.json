@@ -545,7 +545,9 @@
     "categoryTabAll": "All",
     "deleteCategory": "Delete",
     "deleteCategoryConfirm": "Delete category \"{{name}}\"? This can't be undone.",
-    "categoryInUse": "Can't delete — {{businesses}} businesses and {{services}} services still use this category. Move them to another category first.",
+    "categoryInUse": "Can't delete — {{businesses}} businesses and {{services}} services still use this category. Pick a category below to move them into and delete this one.",
+    "mergeTargetPlaceholder": "Move into category...",
+    "mergeAndDelete": "Merge & delete",
     "categoryStatus": {
       "ACTIVE": "Active",
       "PENDING": "Pending",
