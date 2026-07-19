@@ -29,6 +29,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping backend
-        run: curl -sf -o /dev/null -w "backend: %{http_code}\n" https://zaraz-backend.onrender.com/api/catalog/cities || echo "backend ping failed"
+        run: |
+          curl -sf -o /dev/null -w "backend: %{http_code}\n" https://zaraz-backend.onrender.com/api/catalog/cities || echo "backend ping failed"
       - name: Ping frontend
-        run: curl -sf -o /dev/null -w "frontend: %{http_code}\n" https://zaraz-frontend.onrender.com/uk || echo "frontend ping failed"
+        run: |
+          curl -sf -o /dev/null -w "frontend: %{http_code}\n" https://zaraz-frontend.onrender.com/uk || echo "frontend ping failed"
