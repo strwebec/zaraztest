@@ -9,6 +9,7 @@ const Review = require('../models/Review');
 const User = require('../models/User');
 const Category = require('../models/Category');
 const { computeFreeSlots, isWithinBookingWindow } = require('../utils/availability');
+const { computeBusinessRating } = require('../utils/businessRating');
 const { getOrCreateVirtualStaff } = require('../utils/virtualStaff');
 const { asyncHandler } = require('../utils/asyncHandler');
 const { optionalAuth } = require('../middleware/auth');
@@ -119,7 +120,7 @@ router.get(
           }
         }
 
-        const rating = biz.googleRating * 0.6 + (biz.platformRating || biz.googleRating) * 0.4;
+        const rating = computeBusinessRating(biz);
         return {
           id: biz._id,
           name: biz.name,

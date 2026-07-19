@@ -14,6 +14,7 @@ const { requireRole } = require('../middleware/role');
 const { reviewLimiter } = require('../middleware/rateLimit');
 const { asyncHandler } = require('../utils/asyncHandler');
 const { isSlotFree, findClientConflict, isWithinBookingWindow } = require('../utils/availability');
+const { computeBusinessRating } = require('../utils/businessRating');
 const { applyClientViolation } = require('../utils/clientPenalty');
 const { applyUnfairCancellation } = require('../jobs/autoUnblock');
 const { containsStopWords } = require('../utils/stopWords');
@@ -309,7 +310,7 @@ router.get(
           name: biz.name,
           category: biz.category,
           district: biz.district,
-          rating: biz.googleRating * 0.6 + (biz.platformRating || biz.googleRating) * 0.4,
+          rating: computeBusinessRating(biz),
           reviews: biz.googleReviewsCount + biz.platformReviewsCount,
           priceFrom: cheapest?.price ?? null,
           top: !!biz.top?.active,

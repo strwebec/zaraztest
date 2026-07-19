@@ -228,7 +228,7 @@
     "rating": "Rating",
     "ratingHowCalculated": "How is this calculated?",
     "ratingInfoTitle": "How your business rating is calculated",
-    "ratingInfoFormula": "Rating = 60% of your Google rating + 40% of your ZARAZ rating (if you don't have any ZARAZ reviews yet, it's based entirely on Google).",
+    "ratingInfoFormula": "If you have reviews from both Google and ZARAZ, rating = 60% Google + 40% ZARAZ. If reviews only exist on one side, the rating is based entirely on that one — no penalty for not having the other.",
     "ratingInfoPlatform": "Your ZARAZ rating is the average of published client reviews. Reviews currently under dispute review aren't counted.",
     "ratingInfoGoogle": "Businesses rated 5.0 always show first in the catalog, regardless of TOP placement.",
     "rejectedNotice": "Your profile was rejected by an admin. Reason: {{reason}}",

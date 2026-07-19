@@ -14,6 +14,7 @@ const { requireRole } = require('../middleware/role');
 const { attachBusiness } = require('../middleware/business');
 const { asyncHandler } = require('../utils/asyncHandler');
 const { slotUnavailableReason, reasonToErrorCode, maxWorkingDayMinutes } = require('../utils/availability');
+const { computeBusinessRating } = require('../utils/businessRating');
 const { createManualBooking } = require('../utils/manualBooking');
 const { getWeekRange } = require('../utils/weekRange');
 const { applyClientViolation } = require('../utils/clientPenalty');
@@ -207,7 +208,7 @@ router.get(
       bookingsWeek: weekBookings.length,
       revenueToday,
       revenueMonth,
-      rating: req.businessDoc.googleRating * 0.6 + (req.businessDoc.platformRating || req.businessDoc.googleRating) * 0.4,
+      rating: computeBusinessRating(req.businessDoc),
       top: req.businessDoc.top,
     });
   })
