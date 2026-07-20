@@ -31,6 +31,12 @@ function extractSpreadsheetId(input) {
   return /^[a-zA-Z0-9-_]{20,}$/.test(trimmed) ? trimmed : null;
 }
 
+// ZARAZ's brand purple (matches the platform-source accent used on the business
+// calendar) — a bold header in this color plus banded rows and a frozen header
+// makes the sheet readable at a glance instead of a plain grid of text.
+const HEADER_COLOR = { red: 0x5e / 255, green: 0x56 / 255, blue: 0xa8 / 255 };
+const BAND_COLOR = { red: 0xf3 / 255, green: 0xf2 / 255, blue: 0xfa / 255 };
+
 async function connectExistingSheet(spreadsheetId) {
   const auth = getAuth();
   const sheets = google.sheets({ version: 'v4', auth });
@@ -38,24 +44,54 @@ async function connectExistingSheet(spreadsheetId) {
   const meta = await sheets.spreadsheets.get({ spreadsheetId });
   const firstSheet = meta.data.sheets?.[0];
   if (!firstSheet) throw new Error('EMPTY_SPREADSHEET');
-
-  if (firstSheet.properties.title !== 'Bookings') {
-    await sheets.spreadsheets.batchUpdate({
-      spreadsheetId,
-      requestBody: {
-        requests: [
-          { updateSheetProperties: { properties: { sheetId: firstSheet.properties.sheetId, title: 'Bookings' }, fields: 'title' } },
-        ],
-      },
-    });
-  }
+  const sheetId = firstSheet.properties.sheetId;
 
   await sheets.spreadsheets.values.update({
     spreadsheetId,
-    range: 'Bookings!A1',
+    range: `${firstSheet.properties.title}!A1`,
     valueInputOption: 'RAW',
     requestBody: { values: [HEADER] },
   });
+
+  const requests = [
+    ...(firstSheet.properties.title !== 'Bookings'
+      ? [{ updateSheetProperties: { properties: { sheetId, title: 'Bookings' }, fields: 'title' } }]
+      : []),
+    { updateSheetProperties: { properties: { sheetId, gridProperties: { frozenRowCount: 1 } }, fields: 'gridProperties.frozenRowCount' } },
+    {
+      repeatCell: {
+        range: { sheetId, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: HEADER.length },
+        cell: {
+          userEnteredFormat: {
+            backgroundColor: HEADER_COLOR,
+            textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } },
+            verticalAlignment: 'MIDDLE',
+          },
+        },
+        fields: 'userEnteredFormat(backgroundColor,textFormat,verticalAlignment)',
+      },
+    },
+    {
+      addBanding: {
+        bandedRange: {
+          range: { sheetId, startRowIndex: 1, startColumnIndex: 0, endColumnIndex: HEADER.length },
+          rowProperties: { headerColor: HEADER_COLOR, firstBandColor: { red: 1, green: 1, blue: 1 }, secondBandColor: BAND_COLOR },
+        },
+      },
+    },
+    { setBasicFilter: { filter: { range: { sheetId, startRowIndex: 0, startColumnIndex: 0, endColumnIndex: HEADER.length } } } },
+    { autoResizeDimensions: { dimensions: { sheetId, dimension: 'COLUMNS', startIndex: 0, endIndex: HEADER.length } } },
+  ];
+
+  // Formatting is cosmetic — a business reconnecting an already-styled sheet
+  // (banding/filter already present) would otherwise fail this whole call with
+  // "already exists" and never get past it to save backupSheetId, so this must
+  // never block the connection itself from succeeding.
+  try {
+    await sheets.spreadsheets.batchUpdate({ spreadsheetId, requestBody: { requests } });
+  } catch (err) {
+    console.error(`[googleSheets] formatting failed for ${spreadsheetId} (non-fatal):`, err.message);
+  }
 
   return { spreadsheetUrl: meta.data.spreadsheetUrl || `https://docs.google.com/spreadsheets/d/${spreadsheetId}` };
 }
