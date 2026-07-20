@@ -492,6 +492,18 @@ export function updateBusinessWorkingHours(workingHours: WeekSchedule) {
   return apiPatch<{ business: BusinessDetail }>('/business/me/working-hours', { workingHours });
 }
 
+export function fetchBackupSheetInfo() {
+  return apiGet<{ configured: boolean; serviceAccountEmail: string | null }>('/business/backup-sheet-info');
+}
+
+export function connectBackupSheet(url: string) {
+  return apiPost<{ business: BusinessDetail }>('/business/me/backup-sheet', { url });
+}
+
+export function disconnectBackupSheet() {
+  return apiDelete<{ business: BusinessDetail }>('/business/me/backup-sheet');
+}
+
 export function uploadBusinessCoverPhoto(file: File) {
   const form = new FormData();
   form.append('photo', file);

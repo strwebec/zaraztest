@@ -111,6 +111,9 @@ import {
   updateBookingDuration,
   updateBusinessMe,
   updateBusinessWorkingHours,
+  fetchBackupSheetInfo,
+  connectBackupSheet,
+  disconnectBackupSheet,
   updateBusinessService,
   updateBusinessStaff,
   fetchClientStats,
@@ -407,6 +410,26 @@ export function useUpdateBusinessWorkingHours() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: updateBusinessWorkingHours,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['business-me'] }),
+  });
+}
+
+export function useBackupSheetInfo() {
+  return useQuery({ queryKey: ['backup-sheet-info'], queryFn: fetchBackupSheetInfo });
+}
+
+export function useConnectBackupSheet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: connectBackupSheet,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['business-me'] }),
+  });
+}
+
+export function useDisconnectBackupSheet() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: disconnectBackupSheet,
     onSuccess: () => qc.invalidateQueries({ queryKey: ['business-me'] }),
   });
 }

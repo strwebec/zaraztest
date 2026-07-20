@@ -12,6 +12,9 @@ import {
   useDeleteBusinessCoverPhoto,
   useUploadBusinessGalleryPhotos,
   useDeleteBusinessGalleryPhoto,
+  useBackupSheetInfo,
+  useConnectBackupSheet,
+  useDisconnectBackupSheet,
 } from '@/lib/hooks';
 import type { BusinessDetail, WeekSchedule } from '@/lib/utils/api';
 
@@ -247,6 +250,109 @@ function BookingWindowEditor({ business }: { business: BusinessDetail }) {
   );
 }
 
+function BackupSheetSection({ business }: { business: BusinessDetail }) {
+  const { t } = useTranslation();
+  const { data: sheetInfo } = useBackupSheetInfo();
+  const connectSheet = useConnectBackupSheet();
+  const disconnectSheet = useDisconnectBackupSheet();
+  const [url, setUrl] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const serviceAccountEmail = sheetInfo?.serviceAccountEmail;
+
+  function errorText(code?: string) {
+    if (code === 'INVALID_URL') return t('biz.backupSheetErrorInvalidUrl');
+    if (code === 'SHEET_NOT_SHARED') return t('biz.backupSheetErrorNotShared');
+    return t('biz.backupSheetErrorGeneric');
+  }
+
+  return (
+    <section className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      <h2 className="text-xs font-bold uppercase tracking-wide text-text-muted">{t('biz.backupSheetTitle')}</h2>
+      <p className="text-xs text-text-muted">{t('biz.backupSheetHint')}</p>
+
+      {business.backupSheetUrl ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <a
+            href={business.backupSheetUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-xl border border-primary/40 px-4 py-2 text-xs font-semibold text-primary transition hover:bg-primary-glow"
+          >
+            {t('biz.backupSheetOpen')}
+          </a>
+          <span className="text-xs font-semibold text-success">{t('biz.backupSheetConnected')}</span>
+          <button
+            type="button"
+            onClick={() => {
+              if (!window.confirm(t('biz.backupSheetDisconnectConfirm') as string)) return;
+              disconnectSheet.mutate();
+            }}
+            disabled={disconnectSheet.isPending}
+            className="ml-auto text-xs font-semibold text-text-muted underline disabled:opacity-60"
+          >
+            {t('biz.backupSheetDisconnect')}
+          </button>
+        </div>
+      ) : sheetInfo && !sheetInfo.configured ? (
+        <p className="text-xs text-text-muted">{t('biz.backupSheetNotConfigured')}</p>
+      ) : (
+        <div className="flex flex-col gap-3 rounded-xl bg-bg p-4">
+          <p className="text-xs font-bold text-text">{t('biz.backupSheetConnectTitle')}</p>
+          <p className="text-xs text-text-muted">{t('biz.backupSheetStep1')}</p>
+          <div>
+            <p className="text-xs text-text-muted">{t('biz.backupSheetStep2')}</p>
+            <div className="mt-1 flex items-center gap-2">
+              <code className="rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-text">
+                {serviceAccountEmail || '…'}
+              </code>
+              {serviceAccountEmail && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(serviceAccountEmail);
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  }}
+                  className="text-xs font-semibold text-primary"
+                >
+                  {copied ? t('biz.backupSheetCopied') : t('biz.backupSheetCopyEmail')}
+                </button>
+              )}
+            </div>
+          </div>
+          <p className="text-xs text-text-muted">{t('biz.backupSheetStep3')}</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              type="url"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              placeholder={t('biz.backupSheetUrlPlaceholder') as string}
+              className="min-w-0 flex-1 rounded-lg border border-border bg-surface px-3 py-2 text-xs text-text outline-none focus:border-primary"
+            />
+            <button
+              type="button"
+              onClick={() => {
+                setError(null);
+                connectSheet.mutate(url, {
+                  onSuccess: () => setUrl(''),
+                  onError: (err) => setError(errorText((err as { code?: string }).code)),
+                });
+              }}
+              disabled={connectSheet.isPending || !url.trim()}
+              className="rounded-lg bg-primary px-4 py-2 text-xs font-bold text-white disabled:opacity-60"
+            >
+              {connectSheet.isPending ? t('biz.backupSheetConnecting') : t('biz.backupSheetConnectButton')}
+            </button>
+          </div>
+          {error && <p className="text-xs text-danger">{error}</p>}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function BusinessSettingsPage() {
   const { t } = useTranslation();
   const { data, isLoading } = useBusinessMe();
@@ -316,22 +422,7 @@ export default function BusinessSettingsPage() {
     <div className="flex max-w-2xl flex-col gap-6">
       <h1 className="font-display text-2xl font-bold text-text">{t('biz.settings')}</h1>
 
-      <section className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-5 shadow-sm">
-        <h2 className="text-xs font-bold uppercase tracking-wide text-text-muted">{t('biz.backupSheetTitle')}</h2>
-        <p className="text-xs text-text-muted">{t('biz.backupSheetHint')}</p>
-        {business?.backupSheetUrl ? (
-          <a
-            href={business.backupSheetUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="self-start rounded-xl border border-primary/40 px-4 py-2 text-xs font-semibold text-primary transition hover:bg-primary-glow"
-          >
-            {t('biz.backupSheetOpen')}
-          </a>
-        ) : (
-          <p className="text-xs text-text-muted">{t('biz.backupSheetPending')}</p>
-        )}
-      </section>
+      {business && <BackupSheetSection business={business} />}
 
       {business && <WorkingHoursEditor business={business} />}
 

@@ -2,9 +2,8 @@ const Business = require('../models/Business');
 const Service = require('../models/Service');
 const Staff = require('../models/Staff');
 const Booking = require('../models/Booking');
-const User = require('../models/User');
 const { createManualBooking } = require('../utils/manualBooking');
-const { isConfigured, createBusinessSheet, readSheetRows, writeSheetRows } = require('../utils/googleSheets');
+const { isConfigured, readSheetRows, writeSheetRows } = require('../utils/googleSheets');
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -60,16 +59,11 @@ async function importManualRows(business, rows, services, staffList) {
   }
 }
 
+// Only syncs businesses that have manually connected a sheet (see routes/business.js
+// POST /me/backup-sheet) — service accounts can't create their own Drive files, so
+// there's nothing to auto-create here for a business that hasn't connected one yet.
 async function syncOneBusiness(business) {
-  const owner = await User.findById(business.owner).lean();
-  if (!owner) return;
-
-  if (!business.backupSheetId) {
-    const { spreadsheetId, spreadsheetUrl } = await createBusinessSheet(business, owner.email);
-    business.backupSheetId = spreadsheetId;
-    business.backupSheetUrl = spreadsheetUrl;
-    await business.save();
-  }
+  if (!business.backupSheetId) return;
 
   const [services, staffList] = await Promise.all([
     Service.find({ business: business._id, active: true }).lean(),

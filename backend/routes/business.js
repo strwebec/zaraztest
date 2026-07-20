@@ -22,6 +22,7 @@ const { containsStopWords } = require('../utils/stopWords');
 const { applyPhoneReveal } = require('../utils/phoneReveal');
 const { recomputeBusinessReviewStats } = require('../utils/reviewStats');
 const { getOrCreateVirtualStaff } = require('../utils/virtualStaff');
+const { isConfigured: sheetsConfigured, connectExistingSheet, extractSpreadsheetId } = require('../utils/googleSheets');
 const Business = require('../models/Business');
 const Category = require('../models/Category');
 const PlatformSettings = require('../models/PlatformSettings');
@@ -128,6 +129,55 @@ router.patch(
     // business's real hours, if one already exists — a no-op for businesses that have
     // added real staff and never needed it.
     await Staff.updateOne({ business: req.businessId, virtual: true }, { schedule: workingHours });
+    res.json({ business });
+  })
+);
+
+router.get(
+  '/backup-sheet-info',
+  asyncHandler(async (req, res) => {
+    const configured = sheetsConfigured();
+    res.json({ configured, serviceAccountEmail: configured ? process.env.GOOGLE_SHEETS_CLIENT_EMAIL : null });
+  })
+);
+
+router.post(
+  '/me/backup-sheet',
+  asyncHandler(async (req, res) => {
+    if (!sheetsConfigured()) return res.status(400).json({ error: 'NOT_CONFIGURED' });
+
+    const spreadsheetId = extractSpreadsheetId(req.body?.url);
+    if (!spreadsheetId) return res.status(400).json({ error: 'INVALID_URL' });
+
+    let result;
+    try {
+      result = await connectExistingSheet(spreadsheetId);
+    } catch (err) {
+      // A file that doesn't exist and one that exists but isn't shared with the
+      // service account both come back as 403/404 from the Sheets API — either way
+      // the fix on the business's side is the same: share it with the service account.
+      const status = err.code || err.response?.status;
+      const accessError = status === 403 || status === 404 || status === '403' || status === '404';
+      return res.status(400).json({ error: accessError ? 'SHEET_NOT_SHARED' : 'CONNECT_FAILED' });
+    }
+
+    const business = await Business.findByIdAndUpdate(
+      req.businessId,
+      { backupSheetId: spreadsheetId, backupSheetUrl: result.spreadsheetUrl },
+      { new: true }
+    );
+    res.json({ business });
+  })
+);
+
+router.delete(
+  '/me/backup-sheet',
+  asyncHandler(async (req, res) => {
+    const business = await Business.findByIdAndUpdate(
+      req.businessId,
+      { $unset: { backupSheetId: 1, backupSheetUrl: 1 } },
+      { new: true }
+    );
     res.json({ business });
   })
 );
