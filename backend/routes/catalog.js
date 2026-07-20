@@ -20,6 +20,10 @@ router.use(catalogLimiter);
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const VIEW_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
+// A 5.0 rating only outranks paid TOP placement once it's backed by enough platform
+// reviews to not be a fluke of 1-2 reviews — otherwise a brand-new business could
+// game the top catalog slot with a couple of favors.
+const MIN_PLATFORM_REVIEWS_FOR_TOP_BYPASS = 100;
 
 function hashIp(ip) {
   return crypto.createHash('sha256').update(ip || 'unknown').digest('hex');
@@ -128,6 +132,7 @@ router.get(
           district: biz.district,
           rating,
           reviews: biz.googleReviewsCount + biz.platformReviewsCount,
+          platformReviewsCount: biz.platformReviewsCount,
           priceFrom: cheapest?.price ?? null,
           priceFromIsFree: !!cheapest?.isFree,
           coverPhotoUrl: biz.coverPhotoUrl,
@@ -146,18 +151,17 @@ router.get(
     if (sort === 'price') {
       sorted = withSlot.sort((a, b) => (a.priceFrom ?? Infinity) - (b.priceFrom ?? Infinity));
     } else {
-      // TOP is shown after all 5-star businesses but before everything under 5 stars;
+      // TOP is shown after all proven 5-star businesses (5.0 rating AND at least
+      // MIN_PLATFORM_REVIEWS_FOR_TOP_BYPASS platform reviews) but before everything else;
       // a 5-star business that also bought TOP stays ranked among the other 5-star ones.
-      const fiveStar = withSlot.filter((r) => Math.round(r.rating) === 5).sort((a, b) => b._score - a._score);
-      const topNotFiveStar = withSlot
-        .filter((r) => r.top && Math.round(r.rating) !== 5)
-        .sort((a, b) => b._score - a._score);
-      const rest = withSlot
-        .filter((r) => !r.top && Math.round(r.rating) !== 5)
-        .sort((a, b) => b._score - a._score);
+      // A 5.0 rating on too few reviews doesn't bypass TOP — it's sorted like any other listing.
+      const bypassesTop = (r) => Math.round(r.rating) === 5 && r.platformReviewsCount >= MIN_PLATFORM_REVIEWS_FOR_TOP_BYPASS;
+      const fiveStar = withSlot.filter(bypassesTop).sort((a, b) => b._score - a._score);
+      const topNotFiveStar = withSlot.filter((r) => r.top && !bypassesTop(r)).sort((a, b) => b._score - a._score);
+      const rest = withSlot.filter((r) => !r.top && !bypassesTop(r)).sort((a, b) => b._score - a._score);
       sorted = [...fiveStar, ...topNotFiveStar, ...rest];
     }
-    sorted = sorted.map(({ _score, ...r }) => r);
+    sorted = sorted.map(({ _score, platformReviewsCount, ...r }) => r);
 
     res.json({ city: cityDoc, date: targetDate, count: sorted.length, businesses: sorted });
   })
