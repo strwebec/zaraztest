@@ -21,6 +21,7 @@ const notificationSchema = new mongoose.Schema(
         'review_disputed',
         'review_dispute_response',
         'review_dispute_resolved',
+        'unfair_cancellation_notice',
       ],
       required: true,
     },

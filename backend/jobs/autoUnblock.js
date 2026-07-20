@@ -1,10 +1,20 @@
 const Business = require('../models/Business');
 const Invoice = require('../models/Invoice');
 const Booking = require('../models/Booking');
+const Notification = require('../models/Notification');
 const { sendMail } = require('../utils/mailer');
 const User = require('../models/User');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const RESET_WINDOW_MS = 182 * DAY_MS;
+// The first FREE_UNFAIR_CANCELLATIONS unfair cancellations in a 6-month window are
+// silent — no warning, no notification. The next one is a single warning. Every one
+// after that (re)applies a 30-day catalog-visibility restriction. Once the business
+// has racked up REVIEW_THRESHOLD in the window, it's escalated to a human admin.
+const FREE_UNFAIR_CANCELLATIONS = 3;
+const WARNING_AT = FREE_UNFAIR_CANCELLATIONS + 1;
+const PENALTY_DAYS = 30;
+const REVIEW_THRESHOLD = FREE_UNFAIR_CANCELLATIONS + 5;
 
 async function escalateOverdueInvoices() {
   const now = Date.now();
@@ -82,14 +92,44 @@ async function applyUnfairCancellation(businessId) {
   const business = await Business.findById(businessId);
   if (!business) return;
 
-  business.unfairCancellations += 1;
+  // A stale window (or a business that's never had one, pre-migration) resets the
+  // slate — an unfair cancellation from 7 months ago shouldn't still count today.
+  if (!business.unfairCancellationsSince || Date.now() - business.unfairCancellationsSince.getTime() > RESET_WINDOW_MS) {
+    business.unfairCancellations = 0;
+    business.warnings = 0;
+    business.unfairCancellationsSince = new Date();
+  }
 
-  if (business.unfairCancellations === 3) {
+  business.unfairCancellations += 1;
+  const count = business.unfairCancellations;
+
+  const notify = (title, text) =>
+    business.owner ? Notification.create({ user: business.owner, type: 'unfair_cancellation_notice', title, text }) : null;
+
+  if (count < WARNING_AT) {
+    // Within the free allowance — no consequence, no notification.
+  } else if (count === WARNING_AT) {
     business.warnings += 1;
-  } else if (business.unfairCancellations === 6) {
-    business.catalogPenaltyUntil = new Date(Date.now() + 30 * DAY_MS);
-  } else if (business.unfairCancellations === 9) {
+    await notify(
+      'Попередження щодо скасувань',
+      `Це вже ${count}-та бронь, яку ви скасували без пояснення за останні пів року (безкоштовний ліміт — ${FREE_UNFAIR_CANCELLATIONS}). ` +
+        `Якщо це повториться, заклад тимчасово матиме нижчу видимість у каталозі на ${PENALTY_DAYS} днів. ` +
+        `Щоб уникнути обмежень — не скасовуйте підтверджені записи без поважної причини; якщо скасування дійсно потрібне, завжди погоджуйте це з клієнтом заздалегідь, щоб він підтвердив це у своєму акаунті.`
+    );
+  } else if (count < REVIEW_THRESHOLD) {
+    business.catalogPenaltyUntil = new Date(Date.now() + PENALTY_DAYS * DAY_MS);
+    await notify(
+      'Тимчасове обмеження видимості в каталозі',
+      `Через систематичні скасування підтверджених записів без пояснення (${count} за останні пів року) заклад матиме нижчу видимість у каталозі до ${business.catalogPenaltyUntil.toLocaleDateString('uk-UA')}. ` +
+        `Кожне наступне таке скасування продовжує обмеження ще на ${PENALTY_DAYS} днів і наближає заклад до ручного розгляду адміністрацією. ` +
+        `Щоб зняти ризик — просто не скасовуйте підтверджені записи без поважної причини протягом наступних пів року.`
+    );
+  } else {
     business.underReview = true;
+    await notify(
+      'Заклад передано на розгляд адміністрації',
+      `Кількість скасованих вами записів без пояснення (${count} за пів року) перевищила допустиму межу. Ваш профіль передано на ручний розгляд адміністрації ZARAZ — можливе тимчасове блокування.`
+    );
   }
 
   await business.save();

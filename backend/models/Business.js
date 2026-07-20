@@ -91,6 +91,10 @@ const businessSchema = new mongoose.Schema(
     },
 
     unfairCancellations: { type: Number, default: 0 },
+    // Start of the current 6-month counting window for unfairCancellations/warnings —
+    // both reset to 0 once this is more than ~6 months old, so an old slip-up doesn't
+    // count against a business forever. See applyUnfairCancellation in jobs/autoUnblock.js.
+    unfairCancellationsSince: { type: Date, default: Date.now },
     warnings: { type: Number, default: 0 },
     underReview: { type: Boolean, default: false },
     catalogPenaltyUntil: Date,
