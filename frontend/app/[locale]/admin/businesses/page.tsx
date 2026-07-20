@@ -15,12 +15,6 @@ const STATUS_STYLE: Record<string, string> = {
   BLOCKED: 'bg-danger/10 text-danger',
 };
 
-function rating(biz: { googleRating?: number; platformRating?: number }) {
-  const g = biz.googleRating ?? 0;
-  const p = biz.platformRating ?? g;
-  return g * 0.6 + p * 0.4;
-}
-
 export default function AdminBusinessesPage() {
   const { t } = useTranslation();
   const { locale } = useParams<{ locale: Locale }>();
@@ -72,7 +66,7 @@ export default function AdminBusinessesPage() {
                         {biz.city?.name ?? ''}
                         {biz.district ? ` · ${biz.district}` : ''}
                       </span>
-                      <span>★ {rating(biz).toFixed(1)} ({reviews})</span>
+                      <span>★ {(biz.rating ?? 0).toFixed(1)} ({reviews})</span>
                       <span>{t('admin.joinedOn', { date: new Date(biz.createdAt).toLocaleDateString() })}</span>
                     </div>
                   </div>

@@ -180,7 +180,7 @@ router.get(
       recordProfileView(req, biz),
     ]);
 
-    res.json({ business: biz, services, staff });
+    res.json({ business: { ...biz, rating: computeBusinessRating(biz) }, services, staff });
   })
 );
 

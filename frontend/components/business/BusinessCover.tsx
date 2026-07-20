@@ -23,7 +23,7 @@ export function BusinessCover({
   onToggleFavorite?: () => void;
 }) {
   const router = useRouter();
-  const rating = business.googleRating * 0.6 + (business.platformRating || business.googleRating) * 0.4;
+  const rating = business.rating ?? 0;
   const reviews = business.googleReviewsCount + business.platformReviewsCount;
 
   const backgroundImage = business.coverPhotoUrl

@@ -23,6 +23,7 @@ const { runMonthlyInvoices } = require('../jobs/monthlyInvoices');
 const { runDailySweep } = require('../jobs/autoUnblock');
 const { runSheetsSync } = require('../jobs/sheetsSync');
 const { recomputeBusinessReviewStats } = require('../utils/reviewStats');
+const { computeBusinessRating } = require('../utils/businessRating');
 const { logAdminAction } = require('../utils/auditLog');
 const { customCategorySlug } = require('../utils/slugify');
 const { findDuplicateCategory } = require('../utils/categoryDedup');
@@ -176,7 +177,7 @@ router.get(
       .populate('city', 'name')
       .sort({ createdAt: -1 })
       .lean();
-    res.json({ businesses });
+    res.json({ businesses: businesses.map((b) => ({ ...b, rating: computeBusinessRating(b) })) });
   })
 );
 
@@ -201,7 +202,7 @@ router.get(
     ]);
 
     res.json({
-      business,
+      business: { ...business, rating: computeBusinessRating(business) },
       stats: {
         servicesCount,
         staffCount,

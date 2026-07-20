@@ -48,6 +48,7 @@ export type BusinessDetail = {
   googleReviewsCount: number;
   platformRating: number;
   platformReviewsCount: number;
+  rating?: number;
   top?: { active: boolean; until?: string };
   cancellationPolicyHours: 12 | 24 | 48;
   bufferMinutes?: number;
@@ -894,6 +895,7 @@ export type AdminBusiness = {
   googleReviewsCount?: number;
   platformRating?: number;
   platformReviewsCount?: number;
+  rating?: number;
   top?: { active: boolean; until?: string };
   billing?: { status: 'CURRENT' | 'OVERDUE' | 'BLOCKED' };
   blockedUntil?: string | null;
