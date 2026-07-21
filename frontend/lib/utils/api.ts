@@ -182,7 +182,7 @@ export function fetchBusinesses(params: {
   if (params.sort) qs.set('sort', params.sort);
   if (params.q) qs.set('q', params.q);
   if (params.requireSlot === false) qs.set('requireSlot', 'false');
-  return apiGet<{ city: City; date: string; count: number; businesses: CatalogBusiness[] }>(
+  return apiGet<{ city: City; date: string; count: number; cityBusinessCount: number; businesses: CatalogBusiness[] }>(
     `/catalog/businesses?${qs.toString()}`
   );
 }
@@ -240,10 +240,14 @@ export function registerClient(payload: {
   email: string;
   phone?: string;
   password: string;
-  citySlug: string;
+  citySlug?: string;
+  cityName?: string;
   agreeToTerms: boolean;
 }) {
-  return apiPost<{ pendingVerification: true; email: string }>('/auth/register/client', payload);
+  return apiPost<{ pendingVerification: true; email: string; city: { slug: string; name: string } }>(
+    '/auth/register/client',
+    payload
+  );
 }
 
 export function registerBusiness(payload: {
@@ -254,10 +258,14 @@ export function registerBusiness(payload: {
   businessName: string;
   category: string;
   customCategoryName?: string;
-  citySlug: string;
+  citySlug?: string;
+  cityName?: string;
   agreeToTerms: boolean;
 }) {
-  return apiPost<{ pendingVerification: true; email: string }>('/auth/register/business', payload);
+  return apiPost<{ pendingVerification: true; email: string; city: { slug: string; name: string } }>(
+    '/auth/register/business',
+    payload
+  );
 }
 
 export function verifyRegistrationCode(payload: { email: string; code: string }) {
@@ -493,6 +501,7 @@ export function updateBusinessMe(payload: Partial<{
   socials: { instagram?: string; facebook?: string };
   bufferMinutes: number;
   bookingWindowDays: number;
+  cancellationPolicyHours: 12 | 24 | 48;
 }>) {
   return apiPatch<{ business: BusinessDetail }>('/business/me', payload);
 }

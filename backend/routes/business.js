@@ -93,6 +93,9 @@ router.patch(
     ) {
       update.bookingWindowDays = req.body.bookingWindowDays;
     }
+    if ([12, 24, 48].includes(req.body?.cancellationPolicyHours)) {
+      update.cancellationPolicyHours = req.body.cancellationPolicyHours;
+    }
     if (req.body?.socials && typeof req.body.socials === 'object') {
       update.socials = {
         instagram: typeof req.body.socials.instagram === 'string' ? req.body.socials.instagram.trim() : req.businessDoc.socials?.instagram,

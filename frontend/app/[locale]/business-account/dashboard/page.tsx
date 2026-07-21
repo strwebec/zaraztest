@@ -159,7 +159,6 @@ export default function BusinessDashboardPage() {
 
       {showRatingInfo && (
         <InfoModal title={t('biz.ratingInfoTitle') as string} onClose={() => setShowRatingInfo(false)}>
-          <p>{t('biz.ratingInfoFormula')}</p>
           <p>{t('biz.ratingInfoPlatform')}</p>
           <p>{t('biz.ratingInfoGoogle')}</p>
         </InfoModal>

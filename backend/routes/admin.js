@@ -8,6 +8,7 @@ const Review = require('../models/Review');
 const Service = require('../models/Service');
 const Staff = require('../models/Staff');
 const Category = require('../models/Category');
+const City = require('../models/City');
 const TopPlacement = require('../models/TopPlacement');
 const Invoice = require('../models/Invoice');
 const PlatformSettings = require('../models/PlatformSettings');
@@ -230,6 +231,10 @@ router.post(
       { new: true }
     );
     if (!business) return res.status(404).json({ error: 'NOT_FOUND' });
+    // A city registered via the "type your own" flow (utils/cityFromInput.js) starts
+    // inactive — approving its first business is the only signal that makes it a real,
+    // searchable city, with no separate manual "add city" step for the super-admin.
+    if (business.city) await City.updateOne({ _id: business.city, active: false }, { active: true });
     await logAdminAction(req, { action: 'business.approve', targetType: 'Business', targetId: business._id, targetLabel: business.name });
     res.json({ business });
   })

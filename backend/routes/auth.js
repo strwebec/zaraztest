@@ -4,10 +4,10 @@ const crypto = require('crypto');
 
 const User = require('../models/User');
 const Business = require('../models/Business');
-const City = require('../models/City');
 const Category = require('../models/Category');
 const { customCategorySlug } = require('../utils/slugify');
 const { findDuplicateCategory } = require('../utils/categoryDedup');
+const { resolveCityForRegistration } = require('../utils/cityFromInput');
 const { sendMail } = require('../utils/mailer');
 const {
   signAccessToken,
@@ -62,7 +62,7 @@ function publicUser(user) {
 }
 
 router.post('/register/client', registerLimiter, asyncHandler(async (req, res) => {
-  const { name, email, phone, password, citySlug, agreeToTerms } = req.body || {};
+  const { name, email, phone, password, citySlug, cityName, agreeToTerms } = req.body || {};
   if (!isNonEmptyString(name) || !isNonEmptyString(password) || !EMAIL_RE.test(email || '')) {
     return res.status(400).json({ error: 'INVALID_INPUT' });
   }
@@ -72,7 +72,8 @@ router.post('/register/client', registerLimiter, asyncHandler(async (req, res) =
   const existing = await User.findOne({ email: email.toLowerCase() });
   if (existing) return res.status(409).json({ error: 'EMAIL_TAKEN' });
 
-  const city = citySlug ? await City.findOne({ slug: citySlug }) : null;
+  const city = await resolveCityForRegistration({ citySlug, cityName });
+  if (!city) return res.status(400).json({ error: 'INVALID_CITY' });
   const passwordHash = await bcrypt.hash(password, 12);
   const verificationCode = generateVerificationCode();
 
@@ -100,12 +101,13 @@ router.post('/register/client', registerLimiter, asyncHandler(async (req, res) =
   res.status(201).json({
     pendingVerification: true,
     email: user.email,
+    city: { slug: city.slug, name: city.name },
     ...(process.env.NODE_ENV === 'test' ? { devVerificationCode: verificationCode } : {}),
   });
 }));
 
 router.post('/register/business', registerLimiter, asyncHandler(async (req, res) => {
-  const { ownerName, email, phone, password, businessName, category, customCategoryName, citySlug, agreeToTerms } =
+  const { ownerName, email, phone, password, businessName, category, customCategoryName, citySlug, cityName, agreeToTerms } =
     req.body || {};
   if (
     !isNonEmptyString(ownerName) ||
@@ -125,7 +127,7 @@ router.post('/register/business', registerLimiter, asyncHandler(async (req, res)
   const existing = await User.findOne({ email: email.toLowerCase() });
   if (existing) return res.status(409).json({ error: 'EMAIL_TAKEN' });
 
-  const city = await City.findOne({ slug: citySlug });
+  const city = await resolveCityForRegistration({ citySlug, cityName });
   if (!city) return res.status(400).json({ error: 'INVALID_CITY' });
 
   // "Other" — the business's category isn't in the approved list yet. Create it as
@@ -193,6 +195,7 @@ router.post('/register/business', registerLimiter, asyncHandler(async (req, res)
   res.status(201).json({
     pendingVerification: true,
     email: user.email,
+    city: { slug: city.slug, name: city.name },
     ...(process.env.NODE_ENV === 'test' ? { devVerificationCode: verificationCode } : {}),
   });
 }));

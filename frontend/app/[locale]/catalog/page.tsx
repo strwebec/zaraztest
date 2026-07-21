@@ -8,11 +8,9 @@ import { CategoryTile } from '@/components/catalog/CategoryTile';
 import { BusinessCard } from '@/components/catalog/BusinessCard';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { useCategories, useBusinesses } from '@/lib/hooks';
-import { DEFAULT_CITY_SLUG } from '@/lib/utils/city';
+import { DEFAULT_CITY_SLUG, DEFAULT_CITY_NAME, getSelectedCity } from '@/lib/utils/city';
 import { toDateKey } from '@/lib/utils/dates';
 import type { Locale } from '@/lib/i18n';
-
-const CITY_SLUG = DEFAULT_CITY_SLUG;
 
 export default function CatalogPage() {
   return (
@@ -34,6 +32,8 @@ function CatalogPageInner() {
   const [date, setDate] = useState(() => searchParams.get('date') || toDateKey(new Date()));
   const [query, setQuery] = useState(searchParams.get('q') ?? '');
   const [debouncedQuery, setDebouncedQuery] = useState(query);
+  const [city, setCity] = useState({ slug: DEFAULT_CITY_SLUG, name: DEFAULT_CITY_NAME });
+  useEffect(() => setCity(getSelectedCity()), []);
 
   // Debounce so typing doesn't fire a request per keystroke, and keep the search
   // term in the URL so it survives a refresh or a shared link ("зберігається").
@@ -51,7 +51,7 @@ function CatalogPageInner() {
 
   const { data: categoriesData } = useCategories();
   const { data, isLoading, isError, refetch, isFetching } = useBusinesses({
-    city: CITY_SLUG,
+    city: city.slug,
     category,
     date,
     sort,
@@ -174,7 +174,13 @@ function CatalogPageInner() {
             </div>
           )}
 
-          {!isLoading && !isError && businesses.length === 0 && (
+          {!isLoading && !isError && businesses.length === 0 && data?.cityBusinessCount === 0 && (
+            <div className="col-span-full py-16 text-center text-sm text-text-muted">
+              {t('home.noBusinessesInCity', { city: city.name })}
+            </div>
+          )}
+
+          {!isLoading && !isError && businesses.length === 0 && (data?.cityBusinessCount ?? 0) > 0 && (
             <div className="col-span-full py-16 text-center text-sm text-text-muted">{t('catalog.noResults')}</div>
           )}
 

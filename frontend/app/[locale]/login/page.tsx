@@ -13,11 +13,12 @@ import {
   useForgotPassword,
   useResetPassword,
   useCategories,
+  useCities,
   useMe,
   ApiError,
 } from '@/lib/hooks';
-import { DEFAULT_CITY_SLUG } from '@/lib/utils/city';
 import { roleHomeHref, isRedirectAllowedForRole } from '@/lib/utils/roleHome';
+import { setSelectedCity } from '@/lib/utils/city';
 import type { Locale } from '@/lib/i18n';
 
 const ERROR_KEY: Record<string, string> = {
@@ -32,6 +33,8 @@ const ERROR_KEY: Record<string, string> = {
 };
 
 type AccountType = 'client' | 'business';
+
+const OTHER_CITY = 'other-city';
 
 // Where a successful login/registration lands, per role — clients land on the
 // public home/catalog (browsing-first), other roles go straight to their
@@ -69,6 +72,8 @@ function LoginPageInner() {
   const [businessName, setBusinessName] = useState('');
   const [category, setCategory] = useState('');
   const [customCategoryName, setCustomCategoryName] = useState('');
+  const [citySlug, setCitySlug] = useState('');
+  const [cityName, setCityName] = useState('');
   const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [pendingVerification, setPendingVerification] = useState<{ email: string } | null>(null);
   const [code, setCode] = useState('');
@@ -80,11 +85,17 @@ function LoginPageInner() {
 
   const { data: categoriesData } = useCategories();
   const categories = categoriesData?.categories ?? [];
+  const { data: citiesData } = useCities();
+  const cities = citiesData?.cities ?? [];
   const { data: meData } = useMe();
 
   useEffect(() => {
     if (!category && categories.length) setCategory(categories[0].id);
   }, [categories, category]);
+
+  useEffect(() => {
+    if (!citySlug && cities.length) setCitySlug(cities[0].slug);
+  }, [cities, citySlug]);
 
   useEffect(() => {
     if (meData?.user) {
@@ -118,9 +129,11 @@ function LoginPageInner() {
           email,
           phone,
           password,
-          citySlug: DEFAULT_CITY_SLUG,
+          citySlug: citySlug === OTHER_CITY ? undefined : citySlug,
+          cityName: citySlug === OTHER_CITY ? cityName : undefined,
           agreeToTerms,
         });
+        setSelectedCity(res.city);
         setPendingVerification({ email: res.email });
       } else {
         const res = await registerBusinessMutation.mutateAsync({
@@ -131,9 +144,11 @@ function LoginPageInner() {
           businessName,
           category,
           customCategoryName: category === 'other' ? customCategoryName : undefined,
-          citySlug: DEFAULT_CITY_SLUG,
+          citySlug: citySlug === OTHER_CITY ? undefined : citySlug,
+          cityName: citySlug === OTHER_CITY ? cityName : undefined,
           agreeToTerms,
         });
+        setSelectedCity(res.city);
         setPendingVerification({ email: res.email });
       }
     } catch (err) {
@@ -436,6 +451,33 @@ function LoginPageInner() {
             placeholder={(accountType === 'business' ? t('auth.ownerName') : t('auth.name')) as string}
             className="rounded-xl border border-border bg-surface px-4 py-3 text-sm text-text outline-none focus:border-primary"
           />
+        )}
+
+        {tab === 'register' && (
+          <>
+            <select
+              required
+              value={citySlug}
+              onChange={(e) => setCitySlug(e.target.value)}
+              className="rounded-xl border border-border bg-surface px-4 py-3 text-sm text-text outline-none focus:border-primary"
+            >
+              {cities.map((c) => (
+                <option key={c.slug} value={c.slug}>
+                  {i18n.language === 'en' && c.nameEn ? c.nameEn : c.name}
+                </option>
+              ))}
+              <option value={OTHER_CITY}>{t('auth.otherCity')}</option>
+            </select>
+            {citySlug === OTHER_CITY && (
+              <input
+                required
+                value={cityName}
+                onChange={(e) => setCityName(e.target.value)}
+                placeholder={t('auth.otherCityPlaceholder') as string}
+                className="rounded-xl border border-border bg-surface px-4 py-3 text-sm text-text outline-none focus:border-primary"
+              />
+            )}
+          </>
         )}
 
         {tab === 'register' && accountType === 'business' && (

@@ -200,6 +200,56 @@ function BufferTimeEditor({ business }: { business: BusinessDetail }) {
   );
 }
 
+const CANCELLATION_POLICY_OPTIONS = [24, 48] as const;
+
+function CancellationPolicyEditor({ business }: { business: BusinessDetail }) {
+  const { t } = useTranslation();
+  const updateMe = useUpdateBusinessMe();
+  const [value, setValue] = useState<24 | 48>(business.cancellationPolicyHours === 48 ? 48 : 24);
+  const [saved, setSaved] = useState(false);
+
+  return (
+    <section className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
+      <h2 className="text-xs font-bold uppercase tracking-wide text-text-muted">{t('biz.cancellationPolicyTitle')}</h2>
+      <p className="text-xs text-text-muted">{t('biz.cancellationPolicyHint')}</p>
+      <div className="flex flex-wrap items-center gap-2">
+        {CANCELLATION_POLICY_OPTIONS.map((hours) => (
+          <button
+            key={hours}
+            type="button"
+            onClick={() => setValue(hours)}
+            className={`rounded-lg px-4 py-1.5 text-xs font-semibold transition ${
+              value === hours ? 'bg-primary text-white' : 'border border-border text-text-muted hover:border-primary'
+            }`}
+          >
+            {t('biz.cancellationPolicyHours', { count: hours })}
+          </button>
+        ))}
+      </div>
+      <div className="mt-1 flex items-center gap-3">
+        <button
+          onClick={() =>
+            updateMe.mutate(
+              { cancellationPolicyHours: value },
+              {
+                onSuccess: () => {
+                  setSaved(true);
+                  setTimeout(() => setSaved(false), 2500);
+                },
+              }
+            )
+          }
+          disabled={updateMe.isPending}
+          className="self-start rounded-lg bg-primary px-4 py-1.5 text-xs font-bold text-white disabled:opacity-60"
+        >
+          {t('biz.save')}
+        </button>
+        {saved && <span className="text-xs text-success">{t('biz.settingsSaved')}</span>}
+      </div>
+    </section>
+  );
+}
+
 const BOOKING_WINDOW_OPTIONS = [7, 14, 21, 30, 60, 90];
 
 function BookingWindowEditor({ business }: { business: BusinessDetail }) {
@@ -427,6 +477,8 @@ export default function BusinessSettingsPage() {
       {business && <WorkingHoursEditor business={business} />}
 
       {business && <BufferTimeEditor business={business} />}
+
+      {business && <CancellationPolicyEditor business={business} />}
 
       {business && <BookingWindowEditor business={business} />}
 

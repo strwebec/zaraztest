@@ -1,18 +1,17 @@
 'use client';
 
 import { useRouter, useParams } from 'next/navigation';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, Calendar, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
 import { CategoryTile } from '@/components/catalog/CategoryTile';
 import { BusinessCarouselRow } from '@/components/catalog/BusinessCarouselRow';
 import { useCategories, useBusinesses, useMe, useFavorites, useAddFavorite, useRemoveFavorite } from '@/lib/hooks';
-import { DEFAULT_CITY_SLUG, DEFAULT_CITY_NAME } from '@/lib/utils/city';
+import { DEFAULT_CITY_SLUG, DEFAULT_CITY_NAME, getSelectedCity } from '@/lib/utils/city';
 import { toDateKey } from '@/lib/utils/dates';
 import type { CatalogBusiness } from '@/lib/utils/api';
 import type { Locale } from '@/lib/i18n';
 
-const CITY_SLUG = DEFAULT_CITY_SLUG;
 const MIN_CATEGORY_ROW_SIZE = 2;
 const MAX_CATEGORY_ROWS = 2;
 const VISIBLE_CATEGORY_COUNT = 8;
@@ -24,13 +23,18 @@ export default function HomePage() {
   const [query, setQuery] = useState('');
   const [date, setDate] = useState(() => toDateKey(new Date()));
   const [showAllCategories, setShowAllCategories] = useState(false);
+  // Starts at the seeded default and swaps to the last-selected city right after
+  // mount — reading localStorage during the initial render would mismatch the
+  // server-rendered HTML and trip a hydration warning.
+  const [city, setCity] = useState({ slug: DEFAULT_CITY_SLUG, name: DEFAULT_CITY_NAME });
+  useEffect(() => setCity(getSelectedCity()), []);
 
   const { data: meData } = useMe();
   const isClient = meData?.user?.role === 'CLIENT';
   const { data: categoriesData } = useCategories();
   // requireSlot: false — these are inspirational browsing rows, not a live availability
   // search, so a business shouldn't vanish just because nobody's free this exact minute.
-  const { data: businessesData, isLoading } = useBusinesses({ city: CITY_SLUG, sort: 'rating', requireSlot: false });
+  const { data: businessesData, isLoading } = useBusinesses({ city: city.slug, sort: 'rating', requireSlot: false });
   const { data: favoritesData } = useFavorites(isClient);
   const addFavorite = useAddFavorite();
   const removeFavorite = useRemoveFavorite();
@@ -135,7 +139,7 @@ export default function HomePage() {
           <div className="h-px w-full bg-border sm:h-auto sm:w-px" />
           <div className="flex items-center gap-2.5 px-3.5 py-3 text-sm text-text-muted">
             <MapPin size={17} className="shrink-0" />
-            {DEFAULT_CITY_NAME}
+            {city.name}
           </div>
           <button
             onClick={handleSearch}
@@ -178,6 +182,13 @@ export default function HomePage() {
       </section>
 
       <section className="mx-auto flex w-full max-w-[1400px] flex-col gap-12 px-6 pb-20">
+        {!isLoading && businessesData?.cityBusinessCount === 0 && (
+          <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border bg-surface px-6 py-12 text-center">
+            <MapPin size={28} className="text-text-muted" />
+            <p className="max-w-md text-sm text-text-muted">{t('home.noBusinessesInCity', { city: city.name })}</p>
+          </div>
+        )}
+
         <BusinessCarouselRow
           title={t('home.popularInCity') as string}
           seeAllLabel={t('home.allBusinesses') as string}
@@ -200,7 +211,7 @@ export default function HomePage() {
         {categoryRows.map(({ categoryId, name, list }) => (
           <BusinessCarouselRow
             key={categoryId}
-            title={t('home.categoryInCity', { category: name }) as string}
+            title={t('home.categoryInCity', { category: name, city: city.name }) as string}
             seeAllLabel={t('home.allBusinesses') as string}
             onSeeAll={() => router.push(`/${locale}/catalog?category=${categoryId}`)}
             businesses={list}

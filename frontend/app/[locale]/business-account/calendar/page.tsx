@@ -425,7 +425,7 @@ export default function BusinessCalendarPage() {
             {/* hour gutter */}
             <div className="flex-none border-r border-border" style={{ width: 52 }}>
               <div style={{ height: 40 }} />
-              <div className="relative" style={{ height: TIMELINE_HEIGHT }}>
+              <div className="relative overflow-hidden" style={{ height: TIMELINE_HEIGHT }}>
                 {Array.from({ length: RANGE_END_HOUR - RANGE_START_HOUR + 1 }).map((_, i) => (
                   <div
                     key={i}
@@ -457,7 +457,7 @@ export default function BusinessCalendarPage() {
                   ) : (
                     <div style={{ height: 40 }} />
                   )}
-                  <div className="relative" style={{ height: TIMELINE_HEIGHT }}>
+                  <div className="relative overflow-hidden" style={{ height: TIMELINE_HEIGHT }}>
                     {Array.from({ length: RANGE_END_HOUR - RANGE_START_HOUR }).map((_, i) => (
                       <div
                         key={i}

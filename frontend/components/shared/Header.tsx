@@ -1,14 +1,16 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { MapPin, LayoutGrid, CalendarDays, Heart, Bell, type LucideIcon } from 'lucide-react';
 import { LogoZaraz } from '@/components/logo/LogoZaraz';
 import { LangToggle } from './LangToggle';
+import { CitySwitcherModal } from './CitySwitcherModal';
 import { useMe, useNotifications } from '@/lib/hooks';
 import { roleHomeHref } from '@/lib/utils/roleHome';
+import { getSelectedCity, type SelectedCity } from '@/lib/utils/city';
 import type { Locale } from '@/lib/i18n';
 
 function HeaderNavTab({
@@ -42,12 +44,20 @@ function HeaderNavTab({
   );
 }
 
-export function Header({ locale, city }: { locale: Locale; city?: string }) {
+export function Header({ locale }: { locale: Locale }) {
   const { t } = useTranslation();
   const router = useRouter();
   const pathname = usePathname();
   const { data: meData } = useMe();
   const user = meData?.user;
+  const [city, setCity] = useState<SelectedCity | null>(null);
+  const [citySwitcherOpen, setCitySwitcherOpen] = useState(false);
+
+  // Read after mount only — this page is server-rendered and localStorage isn't
+  // available there, so the button starts blank and fills in once hydrated.
+  useEffect(() => {
+    setCity(getSelectedCity());
+  }, []);
 
   // Favorites/notifications are a client concept — business owners and admins have
   // their own equivalents inside their cabinet sidebar, so keep the header lean for them.
@@ -67,9 +77,12 @@ export function Header({ locale, city }: { locale: Locale; city?: string }) {
             <LogoZaraz variant="compact" />
           </Link>
           {city && (
-            <button className="hidden items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm text-text-muted transition hover:text-text sm:flex">
+            <button
+              onClick={() => setCitySwitcherOpen(true)}
+              className="hidden items-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm text-text-muted transition hover:border-primary hover:text-text sm:flex"
+            >
               <MapPin size={15} className="text-primary" />
-              {city}
+              {city.name}
             </button>
           )}
         </div>
@@ -133,6 +146,20 @@ export function Header({ locale, city }: { locale: Locale; city?: string }) {
           )}
         </div>
       </div>
+      {citySwitcherOpen && (
+        <CitySwitcherModal
+          current={city}
+          onClose={() => setCitySwitcherOpen(false)}
+          onSelect={(next) => {
+            setCity(next);
+            setCitySwitcherOpen(false);
+            // Full reload — home/catalog read the selected city once on mount, and a
+            // city switch is exactly the kind of context change that should start the
+            // search over rather than try to patch already-fetched state in place.
+            window.location.reload();
+          }}
+        />
+      )}
     </header>
   );
 }

@@ -70,8 +70,16 @@ router.get(
       return res.status(400).json({ error: 'INVALID_QUERY' });
     }
 
-    const cityDoc = await City.findOne({ slug: city, active: true }).lean();
+    // Not gated on active:true here — a client's own city may still be pending (no
+    // approved business yet, see utils/cityFromInput.js), and that's a real, valid
+    // search that should come back as "zero businesses in this city", not a 404.
+    const cityDoc = await City.findOne({ slug: city }).lean();
     if (!cityDoc) return res.status(404).json({ error: 'CITY_NOT_FOUND' });
+
+    // Distinguishes "this city genuinely has no businesses on ZARAZ yet" from "no
+    // results for this particular filter/date" — the two need very different empty
+    // states on the frontend.
+    const cityBusinessCount = await Business.countDocuments({ city: cityDoc._id, status: 'ACTIVE' });
 
     const filter = { city: cityDoc._id, status: 'ACTIVE' };
     if (category) {
@@ -163,7 +171,7 @@ router.get(
     }
     sorted = sorted.map(({ _score, platformReviewsCount, ...r }) => r);
 
-    res.json({ city: cityDoc, date: targetDate, count: sorted.length, businesses: sorted });
+    res.json({ city: cityDoc, date: targetDate, count: sorted.length, cityBusinessCount, businesses: sorted });
   })
 );
 

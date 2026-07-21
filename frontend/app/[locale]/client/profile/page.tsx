@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
-import { X } from 'lucide-react';
+import { LifeBuoy, X } from 'lucide-react';
 import {
   useMe,
   useUpdateProfile,
@@ -217,6 +218,14 @@ export default function ClientProfilePage() {
           {passwordSaved ? t('client.passwordChanged') : t('client.savePassword')}
         </button>
       </form>
+
+      <Link
+        href={`/${locale}/client/support`}
+        className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3 text-sm font-semibold text-text transition hover:border-primary hover:text-primary"
+      >
+        <LifeBuoy size={18} />
+        {t('client.supportLink')}
+      </Link>
 
       {showRatingInfo && (
         <InfoModal title={t('client.ratingInfoTitle') as string} onClose={() => setShowRatingInfo(false)}>
