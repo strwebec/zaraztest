@@ -27,8 +27,9 @@ const { recomputeBusinessReviewStats } = require('../utils/reviewStats');
 const { computeBusinessRating } = require('../utils/businessRating');
 const { sendMail } = require('../utils/mailer');
 const { logAdminAction } = require('../utils/auditLog');
-const { customCategorySlug } = require('../utils/slugify');
+const { customCategorySlug, customCitySlug } = require('../utils/slugify');
 const { findDuplicateCategory } = require('../utils/categoryDedup');
+const { findExistingCity } = require('../utils/cityFromInput');
 const AdminAuditLog = require('../models/AdminAuditLog');
 const PlatformMetricDefinition = require('../models/PlatformMetricDefinition');
 const MonthlyPlatformLedgerEntry = require('../models/MonthlyPlatformLedgerEntry');
@@ -963,6 +964,83 @@ router.post(
     if (!category) return res.status(404).json({ error: 'NOT_FOUND' });
     await logAdminAction(req, { action: 'category.reject', targetType: 'Category', targetId: category._id, targetLabel: category.name });
     res.json({ category });
+  })
+);
+
+// ---- Cities: manage the list a business/client can register under, and confirm the
+// ones auto-created (inactive) via the "type your own city" flow at registration ----
+
+router.get(
+  '/cities',
+  requirePermission('categories'),
+  asyncHandler(async (req, res) => {
+    const { status } = req.query;
+    const filter = {};
+    if (status === 'active') filter.active = true;
+    else if (status === 'pending') filter.active = false;
+    // status === 'all' or unset — every city regardless of active state
+
+    const cities = await City.find(filter).collation({ locale: 'uk', strength: 1 }).sort({ name: 1 }).lean();
+    res.json({ cities });
+  })
+);
+
+// Lets a super-admin add a city directly (already active, immediately searchable)
+// instead of only ever confirming ones created via a business/client registration.
+router.post(
+  '/cities',
+  requirePermission('categories'),
+  asyncHandler(async (req, res) => {
+    const { name, nameEn } = req.body || {};
+    if (typeof name !== 'string' || !name.trim()) return res.status(400).json({ error: 'INVALID_INPUT' });
+
+    const duplicate = await findExistingCity(name);
+    if (duplicate) return res.status(409).json({ error: 'CITY_ALREADY_EXISTS', city: duplicate });
+
+    const city = await City.create({
+      slug: customCitySlug(),
+      name: name.trim(),
+      nameEn: typeof nameEn === 'string' && nameEn.trim() ? nameEn.trim() : undefined,
+      active: true,
+    });
+    await logAdminAction(req, { action: 'city.create', targetType: 'City', targetId: city._id, targetLabel: city.name });
+    res.status(201).json({ city });
+  })
+);
+
+// Manually confirms a city that's still pending (e.g. a client registered from there
+// before any business did) — the same effect business approval already has automatically.
+router.post(
+  '/cities/:id/approve',
+  requirePermission('categories'),
+  asyncHandler(async (req, res) => {
+    const city = await City.findOneAndUpdate({ _id: req.params.id, active: false }, { active: true }, { new: true });
+    if (!city) return res.status(404).json({ error: 'NOT_FOUND' });
+    await logAdminAction(req, { action: 'city.approve', targetType: 'City', targetId: city._id, targetLabel: city.name });
+    res.json({ city });
+  })
+);
+
+// Super-admin only, since this is destructive — blocked while any business or user
+// still references the city, same safety pattern as category delete.
+router.delete(
+  '/cities/:id',
+  onlySuperAdmin,
+  asyncHandler(async (req, res) => {
+    const city = await City.findById(req.params.id);
+    if (!city) return res.status(404).json({ error: 'NOT_FOUND' });
+
+    const [businessCount, userCount] = await Promise.all([
+      Business.countDocuments({ city: city._id }),
+      User.countDocuments({ city: city._id }),
+    ]);
+    if (businessCount || userCount) {
+      return res.status(409).json({ error: 'CITY_IN_USE', businessCount, userCount });
+    }
+
+    await city.deleteOne();
+    await logAdminAction(req, { action: 'city.delete', targetType: 'City', targetId: city._id, targetLabel: city.name });
+    res.json({ ok: true });
   })
 );
 

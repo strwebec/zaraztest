@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { Search, Calendar, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
 import { CategoryTile } from '@/components/catalog/CategoryTile';
 import { BusinessCarouselRow } from '@/components/catalog/BusinessCarouselRow';
+import { CitySwitcherModal } from '@/components/shared/CitySwitcherModal';
 import { useCategories, useBusinesses, useMe, useFavorites, useAddFavorite, useRemoveFavorite } from '@/lib/hooks';
 import { DEFAULT_CITY_SLUG, DEFAULT_CITY_NAME, getSelectedCity } from '@/lib/utils/city';
 import { toDateKey } from '@/lib/utils/dates';
@@ -28,6 +29,7 @@ export default function HomePage() {
   // server-rendered HTML and trip a hydration warning.
   const [city, setCity] = useState({ slug: DEFAULT_CITY_SLUG, name: DEFAULT_CITY_NAME });
   useEffect(() => setCity(getSelectedCity()), []);
+  const [citySwitcherOpen, setCitySwitcherOpen] = useState(false);
 
   const { data: meData } = useMe();
   const isClient = meData?.user?.role === 'CLIENT';
@@ -137,10 +139,14 @@ export default function HomePage() {
             />
           </label>
           <div className="h-px w-full bg-border sm:h-auto sm:w-px" />
-          <div className="flex items-center gap-2.5 px-3.5 py-3 text-sm text-text-muted">
+          <button
+            type="button"
+            onClick={() => setCitySwitcherOpen(true)}
+            className="flex items-center gap-2.5 px-3.5 py-3 text-sm text-text-muted transition hover:text-text"
+          >
             <MapPin size={17} className="shrink-0" />
             {city.name}
-          </div>
+          </button>
           <button
             onClick={handleSearch}
             className="rounded-xl bg-primary px-7 py-3 text-sm font-semibold text-white transition hover:bg-primary-hover"
@@ -221,6 +227,17 @@ export default function HomePage() {
           />
         ))}
       </section>
+
+      {citySwitcherOpen && (
+        <CitySwitcherModal
+          current={city}
+          onClose={() => setCitySwitcherOpen(false)}
+          onSelect={(next) => {
+            setCity(next);
+            setCitySwitcherOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

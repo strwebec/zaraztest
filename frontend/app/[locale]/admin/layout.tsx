@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import Link from 'next/link';
 import { useParams, usePathname, useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
-import { LayoutDashboard, Building2, Star, Rocket, Receipt, BarChart3, Users, UserCog, Tags, ScrollText, LifeBuoy, LogOut } from 'lucide-react';
+import { LayoutDashboard, Building2, Star, Rocket, Receipt, BarChart3, Users, UserCog, Tags, MapPin, ScrollText, LifeBuoy, LogOut } from 'lucide-react';
 import { ClientSidebar, type SidebarTab } from '@/components/client/ClientSidebar';
 import { useMe, useLogout, useAdminSupportThreads, useAdminPendingCounts } from '@/lib/hooks';
 import { hasAdminPermission } from '@/lib/utils/adminPermissions';
@@ -57,6 +57,11 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       href: `/${locale}/admin/categories`,
       label: t('admin.categories'),
       icon: Tags,
+    },
+    can('categories') && {
+      href: `/${locale}/admin/cities`,
+      label: t('admin.cities'),
+      icon: MapPin,
     },
     can('topPlacements') && {
       href: `/${locale}/admin/top-placements`,

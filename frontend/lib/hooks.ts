@@ -9,6 +9,10 @@ import {
   assignBusinessBookingStaff,
   createAdminCategory,
   approveAdminCategory,
+  fetchAdminCities,
+  createAdminCity,
+  approveAdminCity,
+  deleteAdminCity,
   approveAdminReview,
   blockAdminBusiness,
   blockAdminUser,
@@ -858,6 +862,40 @@ export function useDeleteCategory() {
       qc.invalidateQueries({ queryKey: ['admin-categories'] });
       qc.invalidateQueries({ queryKey: ['categories'] });
     },
+  });
+}
+
+export function useAdminCities(status?: 'active' | 'pending' | 'all') {
+  return useQuery({ queryKey: ['admin-cities', status], queryFn: () => fetchAdminCities(status) });
+}
+
+export function useCreateAdminCity() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createAdminCity,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-cities'] });
+      qc.invalidateQueries({ queryKey: ['cities'] });
+    },
+  });
+}
+
+export function useApproveAdminCity() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: approveAdminCity,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin-cities'] });
+      qc.invalidateQueries({ queryKey: ['cities'] });
+    },
+  });
+}
+
+export function useDeleteAdminCity() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: deleteAdminCity,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-cities'] }),
   });
 }
 

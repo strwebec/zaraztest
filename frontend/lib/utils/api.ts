@@ -1081,6 +1081,32 @@ export function deleteAdminCategory(id: string, reassignTo?: string) {
   );
 }
 
+export type AdminCity = {
+  _id: string;
+  slug: string;
+  name: string;
+  nameEn?: string;
+  active: boolean;
+  createdAt: string;
+};
+
+export function fetchAdminCities(status?: 'active' | 'pending' | 'all') {
+  const qs = status ? `?status=${status}` : '';
+  return apiGet<{ cities: AdminCity[] }>(`/admin/cities${qs}`);
+}
+
+export function createAdminCity(payload: { name: string; nameEn?: string }) {
+  return apiPost<{ city: AdminCity }>('/admin/cities', payload);
+}
+
+export function approveAdminCity(id: string) {
+  return apiPost<{ city: AdminCity }>(`/admin/cities/${id}/approve`);
+}
+
+export function deleteAdminCity(id: string) {
+  return apiDelete<{ ok: boolean }>(`/admin/cities/${id}`);
+}
+
 export type AdminAuditLogEntry = {
   _id: string;
   admin: { _id: string; name: string; email: string } | null;

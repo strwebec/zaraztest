@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
-import { CalendarDays, ChevronLeft, ChevronRight, List, Phone, Plus } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, List, Maximize2, Minimize2, Phone, Plus } from 'lucide-react';
 import { ManualBookingModal, todayKey } from '@/components/business/ManualBookingModal';
 import { ServiceWeekAvailabilityGrid } from '@/components/business/ServiceWeekAvailabilityGrid';
 import { RescheduleModal } from '@/components/shared/RescheduleModal';
@@ -83,6 +83,7 @@ export default function BusinessCalendarPage() {
   const { t } = useTranslation();
   const { locale } = useParams<{ locale: Locale }>();
   const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [anchorDate, setAnchorDate] = useState(todayKey());
   const [activeDay, setActiveDay] = useState(todayKey());
   const [weekStart, setWeekStart] = useState(mondayOf(todayKey()));
@@ -161,7 +162,9 @@ export default function BusinessCalendarPage() {
             key: day,
             isToday: day === todayKey(),
             title: `${weekdayShort(day)} ${dayNumber(day)}`,
-            dotColor: undefined as string | undefined,
+            // Same staff-color dot a day-mode column would show for this master —
+            // week mode is a different slice of the same data, not a different look.
+            dotColor: staffFilter ? staffColor.get(staffFilter) : undefined,
             bookings: (byDay.get(day) ?? []).filter((b) => b.staff._id === staffFilter),
           }))
         : columns.map((staff) => ({
@@ -221,7 +224,13 @@ export default function BusinessCalendarPage() {
   }
 
   return (
-    <div className="flex min-w-0 flex-col gap-5">
+    <div
+      className={
+        isFullscreen
+          ? 'fixed inset-0 z-40 flex min-w-0 flex-col gap-5 overflow-y-auto bg-bg p-5 sm:p-8'
+          : 'flex min-w-0 flex-col gap-5'
+      }
+    >
       <div className="sticky top-0 z-20 -mx-5 flex flex-col gap-3 bg-bg px-5 pb-3 pt-1 sm:-mx-8 sm:px-8">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="font-display text-2xl font-bold tracking-tight text-text">{t('biz.calendar')}</h1>
@@ -248,6 +257,14 @@ export default function BusinessCalendarPage() {
                 <List size={15} />
               </button>
             </div>
+            <button
+              onClick={() => setIsFullscreen((v) => !v)}
+              title={t(isFullscreen ? 'biz.exitFullscreen' : 'biz.enterFullscreen') as string}
+              aria-label={t(isFullscreen ? 'biz.exitFullscreen' : 'biz.enterFullscreen') as string}
+              className="flex h-9 w-9 items-center justify-center rounded-xl border border-border bg-surface text-text-muted transition hover:border-primary hover:text-primary"
+            >
+              {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+            </button>
             <button
               onClick={() => {
                 setAnchorDate(addDays(from, -7));
