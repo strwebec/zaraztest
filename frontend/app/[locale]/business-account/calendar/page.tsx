@@ -3,9 +3,8 @@
 import { useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
-import { ChevronLeft, ChevronRight, Phone, Plus } from 'lucide-react';
+import { CalendarDays, ChevronLeft, ChevronRight, List, Phone, Plus } from 'lucide-react';
 import { ManualBookingModal, todayKey } from '@/components/business/ManualBookingModal';
-import { WeekAvailabilityGrid } from '@/components/business/WeekAvailabilityGrid';
 import { ServiceWeekAvailabilityGrid } from '@/components/business/ServiceWeekAvailabilityGrid';
 import { RescheduleModal } from '@/components/shared/RescheduleModal';
 import { Skeleton } from '@/components/ui/Skeleton';
@@ -70,11 +69,20 @@ const STATUS_ACCENT: Record<string, string> = {
   no_show: 'border-warning/40 bg-warning/10',
 };
 
+const STATUS_PILL: Record<string, string> = {
+  confirmed: 'bg-primary/10 text-primary',
+  completed: 'bg-success/10 text-success',
+  cancelled_by_client: 'bg-danger/10 text-danger',
+  cancelled_by_business: 'bg-danger/10 text-danger',
+  no_show: 'bg-warning/10 text-warning',
+};
+
 type BookingPrefill = { date: string; staffId?: string; serviceId?: string; startTime?: string };
 
 export default function BusinessCalendarPage() {
   const { t } = useTranslation();
   const { locale } = useParams<{ locale: Locale }>();
+  const [viewMode, setViewMode] = useState<'calendar' | 'list'>('calendar');
   const [anchorDate, setAnchorDate] = useState(todayKey());
   const [activeDay, setActiveDay] = useState(todayKey());
   const [weekStart, setWeekStart] = useState(mondayOf(todayKey()));
@@ -135,15 +143,50 @@ export default function BusinessCalendarPage() {
     return counts;
   }, [days, byDay]);
 
-  // "All masters" keeps the classic multi-column day timeline (a bird's-eye view of
-  // everyone at once). Picking one master switches to the week free/busy grid below —
-  // that's the actual "is anyone free next Tuesday for X" question staff need answered
-  // fast, and a single stretched-out column of a timeline can't answer it at a glance.
-  const columns = staffFilter
+  // Picking one master keeps the exact same timeline look as "all masters" — just
+  // switches what a column represents: one column per staff member for a single day,
+  // vs one column per day of the week for that single master (so the "is anyone free
+  // this week" view stays visible without swapping to a different-looking widget).
+  const isWeekMode = !!staffFilter;
+  const columns = isWeekMode
     ? staffList.filter((s) => s._id === staffFilter)
     : showStaffColumns
       ? staffList
       : staffList.slice(0, 1);
+
+  const renderColumns = useMemo(
+    () =>
+      isWeekMode
+        ? days.map((day) => ({
+            key: day,
+            isToday: day === todayKey(),
+            title: `${weekdayShort(day)} ${dayNumber(day)}`,
+            dotColor: undefined as string | undefined,
+            bookings: (byDay.get(day) ?? []).filter((b) => b.staff._id === staffFilter),
+          }))
+        : columns.map((staff) => ({
+            key: staff._id,
+            isToday: false,
+            title: showStaffColumns ? staff.name : null,
+            dotColor: showStaffColumns ? staffColor.get(staff._id) : undefined,
+            bookings: showStaffColumns ? dayBookings.filter((b) => b.staff._id === staff._id) : dayBookings,
+          })),
+    [isWeekMode, days, byDay, staffFilter, columns, showStaffColumns, dayBookings, staffColor]
+  );
+
+  // List view always shows the full week regardless of staff/service filters — it's
+  // meant as a flat, scannable alternative to the timeline, not another filtered mode.
+  const listDays = useMemo(
+    () =>
+      days.map((day) => ({
+        day,
+        bookings: (byDay.get(day) ?? [])
+          .filter((b) => !staffFilter || b.staff._id === staffFilter)
+          .filter((b) => !serviceFilter || b.service._id === serviceFilter)
+          .sort((a, b) => a.startTime.localeCompare(b.startTime)),
+      })),
+    [days, byDay, staffFilter, serviceFilter]
+  );
 
   const selected = selectedBooking;
 
@@ -183,6 +226,28 @@ export default function BusinessCalendarPage() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="font-display text-2xl font-bold tracking-tight text-text">{t('biz.calendar')}</h1>
           <div className="flex items-center gap-2">
+            <div className="flex items-center gap-0.5 rounded-xl border border-border bg-surface p-1">
+              <button
+                onClick={() => setViewMode('calendar')}
+                title={t('biz.viewCalendar') as string}
+                aria-label={t('biz.viewCalendar') as string}
+                className={`flex h-7 w-7 items-center justify-center rounded-lg transition ${
+                  viewMode === 'calendar' ? 'bg-primary text-white' : 'text-text-muted hover:text-primary'
+                }`}
+              >
+                <CalendarDays size={15} />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                title={t('biz.viewList') as string}
+                aria-label={t('biz.viewList') as string}
+                className={`flex h-7 w-7 items-center justify-center rounded-lg transition ${
+                  viewMode === 'list' ? 'bg-primary text-white' : 'text-text-muted hover:text-primary'
+                }`}
+              >
+                <List size={15} />
+              </button>
+            </div>
             <button
               onClick={() => {
                 setAnchorDate(addDays(from, -7));
@@ -294,22 +359,58 @@ export default function BusinessCalendarPage() {
         )}
       </div>
 
-      {staffFilter ? (
-        <WeekAvailabilityGrid
-          staffId={staffFilter}
-          serviceId={serviceFilter || undefined}
-          weekStart={weekStart}
-          onWeekChange={setWeekStart}
-          onSlotClick={(date, time) =>
-            setBookingPrefill({ date, staffId: staffFilter, serviceId: serviceFilter || undefined, startTime: time })
-          }
-          onBookingClick={(booking) => {
-            setSelectedBooking(booking);
-            setEditingDuration(false);
-            setActionError(null);
-          }}
-        />
-      ) : serviceFilter ? (
+      {viewMode === 'list' ? (
+        isLoading ? (
+          <Skeleton className="h-[500px]" />
+        ) : listDays.every((d) => !d.bookings.length) ? (
+          <div className="flex items-center justify-center rounded-2xl border border-border bg-surface py-16 text-sm text-text-muted">
+            {t('biz.noBookingsThisWeek')}
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4">
+            {listDays.map(
+              ({ day, bookings: dayBks }) =>
+                dayBks.length > 0 && (
+                  <div key={day} className="flex flex-col gap-2">
+                    <h3 className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-text-muted">
+                      {weekdayShort(day)} {dayNumber(day)}
+                      {day === todayKey() && <span className="rounded-full bg-primary-glow px-2 py-0.5 text-[10px] text-primary">{t('home.today')}</span>}
+                    </h3>
+                    <div className="flex flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+                      {dayBks.map((bk, i) => (
+                        <button
+                          key={bk._id}
+                          onClick={() => {
+                            setSelectedBooking(bk);
+                            setEditingDuration(false);
+                            setActionError(null);
+                          }}
+                          className={`flex flex-wrap items-center gap-x-4 gap-y-1 px-4 py-3 text-left transition hover:bg-surface2 ${
+                            i > 0 ? 'border-t border-border' : ''
+                          }`}
+                        >
+                          <span className="w-12 flex-none font-mono text-xs font-bold text-text">{bk.startTime}</span>
+                          <span className="min-w-[100px] flex-1 truncate text-sm font-semibold text-text">{bk.clientName}</span>
+                          <span className="min-w-[100px] flex-1 truncate text-xs text-text-muted">{bk.service.name}</span>
+                          {showStaffColumns && (
+                            <span className="flex flex-none items-center gap-1.5 text-xs text-text-muted">
+                              <span className="h-2 w-2 rounded-full" style={{ backgroundColor: staffColor.get(bk.staff._id) }} />
+                              {bk.staff.name}
+                            </span>
+                          )}
+                          <span className="flex-none font-mono text-xs font-semibold text-text">{bk.price}₴</span>
+                          <span className={`flex-none rounded-full px-2 py-0.5 text-[10px] font-bold ${STATUS_PILL[bk.status] ?? 'bg-surface2 text-text-muted'}`}>
+                            {t(`biz.status.${bk.status}`)}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )
+            )}
+          </div>
+        )
+      ) : !isWeekMode && serviceFilter ? (
         <ServiceWeekAvailabilityGrid
           serviceId={serviceFilter}
           weekStart={weekStart}
@@ -337,74 +438,69 @@ export default function BusinessCalendarPage() {
               </div>
             </div>
 
-            {/* staff / single column(s) */}
-            {columns.length === 0 ? (
+            {/* one column per staff member (day mode) or one column per weekday (week mode) */}
+            {renderColumns.length === 0 ? (
               <div className="flex flex-1 items-center justify-center py-16 text-sm text-text-muted">
                 {t('biz.noStaffYet')}
               </div>
             ) : (
-              columns.map((staff) => {
-                const colBookings = showStaffColumns
-                  ? dayBookings.filter((b) => b.staff._id === staff._id)
-                  : dayBookings;
-                return (
-                  <div key={staff._id} className="min-w-[220px] flex-1 border-r border-border last:border-r-0">
-                    {showStaffColumns && (
+              renderColumns.map((col) => (
+                <div key={col.key} className="min-w-[220px] flex-1 border-r border-border last:border-r-0">
+                  {col.title ? (
+                    <div
+                      className={`flex items-center justify-center gap-2 border-b border-border px-3 ${col.isToday ? 'bg-primary-glow' : ''}`}
+                      style={{ height: 40 }}
+                    >
+                      {col.dotColor && <span className="h-2 w-2 flex-none rounded-full" style={{ backgroundColor: col.dotColor }} />}
+                      <span className="truncate text-xs font-semibold text-text">{col.title}</span>
+                    </div>
+                  ) : (
+                    <div style={{ height: 40 }} />
+                  )}
+                  <div className="relative" style={{ height: TIMELINE_HEIGHT }}>
+                    {Array.from({ length: RANGE_END_HOUR - RANGE_START_HOUR }).map((_, i) => (
                       <div
-                        className="flex items-center gap-2 border-b border-border px-3"
-                        style={{ height: 40 }}
-                      >
-                        <span
-                          className="h-2 w-2 flex-none rounded-full"
-                          style={{ backgroundColor: staffColor.get(staff._id) }}
-                        />
-                        <span className="truncate text-xs font-semibold text-text">{staff.name}</span>
-                      </div>
-                    )}
-                    {!showStaffColumns && <div style={{ height: 40 }} />}
-                    <div className="relative" style={{ height: TIMELINE_HEIGHT }}>
-                      {Array.from({ length: RANGE_END_HOUR - RANGE_START_HOUR }).map((_, i) => (
-                        <div
-                          key={i}
-                          className="absolute inset-x-0 border-t border-surface2"
-                          style={{ top: i * HOUR_HEIGHT }}
-                        />
-                      ))}
-                      {colBookings.map((bk) => {
-                        const { top, height } = blockStyle(bk);
-                        return (
-                          <button
-                            key={bk._id}
-                            onClick={() => {
-                              setSelectedBooking(bk);
-                              setEditingDuration(false);
-                              setActionError(null);
-                            }}
-                            className={`absolute inset-x-1 flex flex-col overflow-hidden rounded-lg border-l-2 px-2 py-1 text-left transition hover:brightness-95 ${
-                              STATUS_ACCENT[bk.status] ?? 'border-border bg-surface2'
-                            }`}
-                            style={{
-                              top,
-                              height,
-                              borderLeftColor: showStaffColumns
+                        key={i}
+                        className="absolute inset-x-0 border-t border-surface2"
+                        style={{ top: i * HOUR_HEIGHT }}
+                      />
+                    ))}
+                    {col.bookings.map((bk) => {
+                      const { top, height } = blockStyle(bk);
+                      return (
+                        <button
+                          key={bk._id}
+                          onClick={() => {
+                            setSelectedBooking(bk);
+                            setEditingDuration(false);
+                            setActionError(null);
+                          }}
+                          className={`absolute inset-x-1 flex flex-col overflow-hidden rounded-lg border-l-2 px-2 py-1 text-left transition hover:brightness-95 ${
+                            STATUS_ACCENT[bk.status] ?? 'border-border bg-surface2'
+                          }`}
+                          style={{
+                            top,
+                            height,
+                            borderLeftColor: col.dotColor
+                              ? col.dotColor
+                              : showStaffColumns
                                 ? staffColor.get(bk.staff._id)
                                 : bk.source === 'platform'
                                   ? '#5E56A8'
                                   : '#2E9E6D',
-                            }}
-                          >
-                            <span className="truncate font-mono text-[10px] font-bold text-text">{bk.startTime}</span>
-                            <span className="truncate text-[11px] font-semibold text-text">{bk.clientName}</span>
-                            {height > 40 && (
-                              <span className="truncate text-[10px] text-text-muted">{bk.service.name}</span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
+                          }}
+                        >
+                          <span className="truncate font-mono text-[10px] font-bold text-text">{bk.startTime}</span>
+                          <span className="truncate text-[11px] font-semibold text-text">{bk.clientName}</span>
+                          {height > 40 && (
+                            <span className="truncate text-[10px] text-text-muted">{bk.service.name}</span>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
-                );
-              })
+                </div>
+              ))
             )}
           </div>
         </div>

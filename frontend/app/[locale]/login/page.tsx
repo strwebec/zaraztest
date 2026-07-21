@@ -10,6 +10,8 @@ import {
   useRegisterBusiness,
   useVerifyRegistrationCode,
   useResendVerificationCode,
+  useForgotPassword,
+  useResetPassword,
   useCategories,
   useMe,
   ApiError,
@@ -71,6 +73,10 @@ function LoginPageInner() {
   const [pendingVerification, setPendingVerification] = useState<{ email: string } | null>(null);
   const [code, setCode] = useState('');
   const [resendSent, setResendSent] = useState(false);
+  const [forgotPasswordFlow, setForgotPasswordFlow] = useState<{ step: 'request' | 'reset'; email: string } | null>(null);
+  const [resetCode, setResetCode] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [resetCodeSent, setResetCodeSent] = useState(false);
 
   const { data: categoriesData } = useCategories();
   const categories = categoriesData?.categories ?? [];
@@ -92,6 +98,8 @@ function LoginPageInner() {
   const registerBusinessMutation = useRegisterBusiness();
   const verifyCodeMutation = useVerifyRegistrationCode();
   const resendCodeMutation = useResendVerificationCode();
+  const forgotPasswordMutation = useForgotPassword();
+  const resetPasswordMutation = useResetPassword();
   const pending = loginMutation.isPending || registerClientMutation.isPending || registerBusinessMutation.isPending;
   const error = loginMutation.error || registerClientMutation.error || registerBusinessMutation.error;
 
@@ -160,6 +168,43 @@ function LoginPageInner() {
     );
   }
 
+  function handleSendResetCode(e: React.FormEvent) {
+    e.preventDefault();
+    if (!forgotPasswordFlow) return;
+    forgotPasswordMutation.mutate(
+      { email: forgotPasswordFlow.email },
+      { onSuccess: () => setForgotPasswordFlow({ step: 'reset', email: forgotPasswordFlow.email }) }
+    );
+  }
+
+  function handleResendResetCode() {
+    if (!forgotPasswordFlow) return;
+    forgotPasswordMutation.mutate(
+      { email: forgotPasswordFlow.email },
+      {
+        onSuccess: () => {
+          setResetCodeSent(true);
+          setTimeout(() => setResetCodeSent(false), 4000);
+        },
+      }
+    );
+  }
+
+  async function handleResetPassword(e: React.FormEvent) {
+    e.preventDefault();
+    if (!forgotPasswordFlow) return;
+    try {
+      const { user } = await resetPasswordMutation.mutateAsync({
+        email: forgotPasswordFlow.email,
+        code: resetCode,
+        newPassword,
+      });
+      router.push(resolveTarget(locale, user.role, explicitRedirect));
+    } catch {
+      /* error surfaced via resetPasswordMutation.error */
+    }
+  }
+
   // A raw network failure (fetch rejected) or a response with no parseable error
   // code (status >= 500, or a non-JSON body like Render's gateway-timeout page) both
   // mean the request never reached real app logic — most often because the free-tier
@@ -173,6 +218,113 @@ function LoginPageInner() {
       : error && !(error instanceof ApiError && error.code === 'EMAIL_NOT_VERIFIED')
         ? t(looksLikeColdStart ? 'auth.serverWakingUp' : 'auth.genericError')
         : null;
+
+  if (forgotPasswordFlow) {
+    const requestError =
+      forgotPasswordMutation.error instanceof ApiError && ERROR_KEY[forgotPasswordMutation.error.code ?? '']
+        ? t(ERROR_KEY[forgotPasswordMutation.error.code ?? ''])
+        : forgotPasswordMutation.error
+          ? t('auth.genericError')
+          : null;
+    const resetError =
+      resetPasswordMutation.error instanceof ApiError && ERROR_KEY[resetPasswordMutation.error.code ?? '']
+        ? t(ERROR_KEY[resetPasswordMutation.error.code ?? ''])
+        : resetPasswordMutation.error
+          ? t('auth.genericError')
+          : null;
+
+    return (
+      <div className="mx-auto flex min-h-[70vh] max-w-md flex-col justify-center gap-6 px-6 py-16">
+        <div className="flex flex-col gap-2 text-center">
+          <h1 className="font-display text-2xl font-bold text-text">{t('auth.forgotPasswordTitle')}</h1>
+          <p className="text-sm text-text-muted">
+            {forgotPasswordFlow.step === 'request'
+              ? t('auth.forgotPasswordHint')
+              : t('auth.resetCodeHint', { email: forgotPasswordFlow.email })}
+          </p>
+        </div>
+
+        {forgotPasswordFlow.step === 'request' ? (
+          <form onSubmit={handleSendResetCode} className="flex flex-col gap-3">
+            <input
+              required
+              type="email"
+              autoFocus
+              value={forgotPasswordFlow.email}
+              onChange={(e) => setForgotPasswordFlow({ step: 'request', email: e.target.value })}
+              placeholder={t('auth.email') as string}
+              className="rounded-xl border border-border bg-surface px-4 py-3 text-sm text-text outline-none focus:border-primary"
+            />
+            {requestError && <p className="text-sm text-danger">{requestError}</p>}
+            <button
+              type="submit"
+              disabled={forgotPasswordMutation.isPending}
+              className="rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white transition hover:bg-primary-hover disabled:opacity-60"
+            >
+              {t('auth.sendResetCode')}
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleResetPassword} className="flex flex-col gap-3">
+            <input
+              required
+              inputMode="numeric"
+              autoFocus
+              maxLength={6}
+              value={resetCode}
+              onChange={(e) => setResetCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+              placeholder={t('auth.verifyCodePlaceholder') as string}
+              className="rounded-xl border border-border bg-surface px-4 py-3 text-center text-lg tracking-[0.3em] text-text outline-none focus:border-primary"
+            />
+            <input
+              required
+              type="password"
+              minLength={8}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder={t('auth.newPassword') as string}
+              className="rounded-xl border border-border bg-surface px-4 py-3 text-sm text-text outline-none focus:border-primary"
+            />
+            {resetError && <p className="text-sm text-danger">{resetError}</p>}
+            <button
+              type="submit"
+              disabled={resetPasswordMutation.isPending || resetCode.length !== 6}
+              className="rounded-xl bg-primary px-6 py-3 text-sm font-bold text-white transition hover:bg-primary-hover disabled:opacity-60"
+            >
+              {t('auth.resetPasswordButton')}
+            </button>
+          </form>
+        )}
+
+        <div className="flex flex-col items-center gap-2 text-sm">
+          {forgotPasswordFlow.step === 'reset' && (
+            <>
+              <button
+                type="button"
+                onClick={handleResendResetCode}
+                disabled={forgotPasswordMutation.isPending}
+                className="font-semibold text-primary disabled:opacity-60"
+              >
+                {t('auth.resendCode')}
+              </button>
+              {resetCodeSent && <span className="text-xs text-success">{t('auth.resendCodeSent')}</span>}
+            </>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setForgotPasswordFlow(null);
+              setResetCode('');
+              setNewPassword('');
+            }}
+            className="text-xs text-text-muted underline"
+          >
+            {t('auth.backToLogin')}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (pendingVerification) {
     const verifyError =
@@ -368,7 +520,20 @@ function LoginPageInner() {
           </label>
         )}
 
-        {errorMessage && <p className="text-sm text-danger">{errorMessage}</p>}
+        {errorMessage && (
+          <div className="flex flex-col gap-1">
+            <p className="text-sm text-danger">{errorMessage}</p>
+            {tab === 'login' && (
+              <button
+                type="button"
+                onClick={() => setForgotPasswordFlow({ step: 'request', email })}
+                className="self-start text-xs font-semibold text-primary underline"
+              >
+                {t('auth.forgotPassword')}
+              </button>
+            )}
+          </div>
+        )}
 
         <button
           type="submit"

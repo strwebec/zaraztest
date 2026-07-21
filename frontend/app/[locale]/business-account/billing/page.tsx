@@ -88,14 +88,16 @@ export default function BusinessBillingPage() {
           invoices.map((inv) => (
             <div key={inv._id} className="flex flex-col gap-2 rounded-2xl border border-border bg-surface p-4 shadow-sm">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-text">{inv.month}</span>
+                <span className="text-sm font-bold text-text">{inv.type === 'MANUAL' ? inv.description : inv.month}</span>
                 <span className={`text-xs font-bold ${STATUS_STYLE[inv.status] ?? 'text-text-muted'}`}>
                   {t(`biz.invoiceStatus.${inv.status}`)}
                 </span>
               </div>
               <div className="flex items-baseline gap-2">
                 <span className="font-mono text-xl font-bold text-text">{inv.totalCommission}₴</span>
-                <span className="text-xs text-text-muted">{t('biz.invoiceItemsCount', { count: inv.items.length })}</span>
+                {inv.type !== 'MANUAL' && (
+                  <span className="text-xs text-text-muted">{t('biz.invoiceItemsCount', { count: inv.items.length })}</span>
+                )}
               </div>
               <div className="text-xs text-text-muted">
                 {t('biz.invoiceDue', { date: new Date(inv.dueAt).toLocaleDateString() })}

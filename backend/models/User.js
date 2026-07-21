@@ -24,6 +24,9 @@ const userSchema = new mongoose.Schema(
     emailVerifyToken: String,
     emailVerifyExpires: Date,
 
+    passwordResetToken: String,
+    passwordResetExpires: Date,
+
     refreshTokens: [
       {
         token: String,

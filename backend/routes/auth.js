@@ -322,4 +322,57 @@ router.post('/resend-code', registerLimiter, asyncHandler(async (req, res) => {
   res.json({ ok: true });
 }));
 
+router.post('/forgot-password', registerLimiter, asyncHandler(async (req, res) => {
+  const { email } = req.body || {};
+  if (!EMAIL_RE.test(email || '')) return res.status(400).json({ error: 'INVALID_INPUT' });
+
+  const user = await User.findOne({ email: email.toLowerCase() });
+  // Always respond ok regardless of whether the account exists — a distinct response
+  // here would let an attacker enumerate registered emails (same as /resend-code).
+  if (user) {
+    const resetCode = generateVerificationCode();
+    user.passwordResetToken = hashToken(resetCode);
+    user.passwordResetExpires = new Date(Date.now() + 15 * 60 * 1000);
+    await user.save();
+    await sendMail({
+      to: user.email,
+      subject: 'Відновлення пароля — ZARAZ',
+      html: `Код для відновлення пароля: ${resetCode}. Він дійсний 15 хвилин. Якщо ви не запитували відновлення — просто проігноруйте цей лист.`,
+    });
+  }
+  res.json({ ok: true });
+}));
+
+router.post('/reset-password', verifyCodeLimiter, asyncHandler(async (req, res) => {
+  const { email, code, newPassword } = req.body || {};
+  if (!EMAIL_RE.test(email || '') || !isNonEmptyString(code) || !isNonEmptyString(newPassword)) {
+    return res.status(400).json({ error: 'INVALID_INPUT' });
+  }
+  if (newPassword.length < 8) return res.status(400).json({ error: 'WEAK_PASSWORD' });
+
+  const user = await User.findOne({ email: email.toLowerCase() });
+  const storedCodeHash = user?.passwordResetToken;
+  const incomingCodeHash = hashToken(code);
+  const codesMatch =
+    storedCodeHash &&
+    storedCodeHash.length === incomingCodeHash.length &&
+    crypto.timingSafeEqual(Buffer.from(storedCodeHash), Buffer.from(incomingCodeHash));
+
+  if (!user || !codesMatch || user.passwordResetExpires < new Date()) {
+    return res.status(400).json({ error: 'INVALID_OR_EXPIRED_CODE' });
+  }
+
+  user.passwordHash = await bcrypt.hash(newPassword, 12);
+  user.passwordResetToken = undefined;
+  user.passwordResetExpires = undefined;
+  // A password reset means any session token issued before it (e.g. from whoever
+  // triggered the need to reset) should stop working — force every device to log in
+  // again with the new password rather than silently staying signed in.
+  user.refreshTokens = [];
+  await user.save();
+
+  await issueSession(res, user);
+  res.json({ user: publicUser(user) });
+}));
+
 module.exports = router;

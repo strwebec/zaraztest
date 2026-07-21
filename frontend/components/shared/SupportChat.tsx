@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Send, LifeBuoy } from 'lucide-react';
+import { Send, LifeBuoy, Paperclip, X } from 'lucide-react';
 import { useSupportThread, useSendSupportMessage, useMarkSupportThreadRead } from '@/lib/hooks';
 
 export function SupportChat() {
@@ -11,7 +11,9 @@ export function SupportChat() {
   const sendMessage = useSendSupportMessage();
   const markRead = useMarkSupportThreadRead();
   const [text, setText] = useState('');
+  const [image, setImage] = useState<File | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const messages = data?.messages ?? [];
   const unreadByUser = data?.thread?.unreadByUser ?? 0;
@@ -27,8 +29,11 @@ export function SupportChat() {
 
   function handleSend() {
     const trimmed = text.trim();
-    if (!trimmed) return;
-    sendMessage.mutate(trimmed);
+    if (!trimmed && !image) return;
+    sendMessage.mutate(
+      { text: trimmed || undefined, image: image || undefined },
+      { onSuccess: () => setImage(null) }
+    );
     setText('');
   }
 
@@ -59,7 +64,12 @@ export function SupportChat() {
                 }`}
               >
                 {m.from === 'admin' && <span className="text-xs font-bold opacity-70">{t('support.teamLabel')}</span>}
-                <p className="whitespace-pre-line leading-relaxed">{m.text}</p>
+                {m.imageUrl && (
+                  <a href={m.imageUrl} target="_blank" rel="noopener noreferrer">
+                    <img src={m.imageUrl} alt="" className="max-h-56 max-w-full rounded-xl object-cover" />
+                  </a>
+                )}
+                {m.text && <p className="whitespace-pre-line leading-relaxed">{m.text}</p>}
                 <span className={`text-[10px] ${m.from === 'user' ? 'text-white/70' : 'text-text-muted'}`}>
                   {new Date(m.createdAt).toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                 </span>
@@ -69,28 +79,52 @@ export function SupportChat() {
           <div ref={bottomRef} />
         </div>
 
-        <div className="flex items-end gap-2 border-t border-border p-3">
-          <textarea
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSend();
-              }
-            }}
-            placeholder={t('support.placeholder') as string}
-            rows={1}
-            className="max-h-32 flex-1 resize-none rounded-xl border border-border bg-bg px-3.5 py-2.5 text-sm text-text outline-none focus:border-primary"
-          />
-          <button
-            onClick={handleSend}
-            disabled={!text.trim() || sendMessage.isPending}
-            aria-label={t('support.send') as string}
-            className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-primary text-white transition hover:bg-primary-hover disabled:opacity-40"
-          >
-            <Send size={16} />
-          </button>
+        <div className="flex flex-col gap-2 border-t border-border p-3">
+          {image && (
+            <div className="flex w-fit items-center gap-2 rounded-xl bg-bg px-3 py-1.5 text-xs text-text-muted">
+              <span className="max-w-[200px] truncate">{image.name}</span>
+              <button onClick={() => setImage(null)} aria-label={t('support.removeImage') as string}>
+                <X size={13} />
+              </button>
+            </div>
+          )}
+          <div className="flex items-end gap-2">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="hidden"
+              onChange={(e) => setImage(e.target.files?.[0] ?? null)}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              aria-label={t('support.attachImage') as string}
+              className="flex h-10 w-10 flex-none items-center justify-center rounded-xl border border-border text-text-muted transition hover:border-primary hover:text-primary"
+            >
+              <Paperclip size={16} />
+            </button>
+            <textarea
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSend();
+                }
+              }}
+              placeholder={t('support.placeholder') as string}
+              rows={1}
+              className="max-h-32 flex-1 resize-none rounded-xl border border-border bg-bg px-3.5 py-2.5 text-sm text-text outline-none focus:border-primary"
+            />
+            <button
+              onClick={handleSend}
+              disabled={(!text.trim() && !image) || sendMessage.isPending}
+              aria-label={t('support.send') as string}
+              className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-primary text-white transition hover:bg-primary-hover disabled:opacity-40"
+            >
+              <Send size={16} />
+            </button>
+          </div>
         </div>
       </div>
     </div>

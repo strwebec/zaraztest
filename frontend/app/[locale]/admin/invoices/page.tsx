@@ -8,7 +8,15 @@ import { ArrowLeft } from 'lucide-react';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { RequireAdminRole } from '@/components/admin/RequireAdminRole';
 import { RequisitesEditor } from '@/components/admin/RequisitesEditor';
-import { useAdminInvoices, useAdminFinanceOverview, useMarkInvoicePaid, useRejectInvoiceReceipt } from '@/lib/hooks';
+import {
+  useAdminInvoices,
+  useAdminFinanceOverview,
+  useMarkInvoicePaid,
+  useRejectInvoiceReceipt,
+  useAdminBusinesses,
+  useCreateAdminInvoice,
+  ApiError,
+} from '@/lib/hooks';
 import type { Locale } from '@/lib/i18n';
 
 const STATUS_STYLE: Record<string, string> = {
@@ -20,6 +28,95 @@ const STATUS_STYLE: Record<string, string> = {
 };
 
 const FILTERS = ['AWAITING_VERIFICATION', 'PENDING', 'OVERDUE', 'BLOCKED', 'PAID'] as const;
+
+function CreateInvoiceForm({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
+  const { data: businessesData } = useAdminBusinesses();
+  const createInvoice = useCreateAdminInvoice();
+  const businesses = businessesData?.businesses ?? [];
+  const [businessId, setBusinessId] = useState('');
+  const [amount, setAmount] = useState('');
+  const [description, setDescription] = useState('');
+  const [done, setDone] = useState(false);
+
+  const errorMessage =
+    createInvoice.error instanceof ApiError && createInvoice.error.code === 'NOT_FOUND'
+      ? t('admin.invoiceCreateBusinessNotFound')
+      : createInvoice.error
+        ? t('auth.genericError')
+        : null;
+
+  if (done) {
+    return (
+      <div className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 shadow-sm">
+        <p className="text-sm font-semibold text-success">{t('admin.invoiceCreateSuccess')}</p>
+        <button onClick={onClose} className="self-start text-xs font-semibold text-primary">
+          {t('admin.close')}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        createInvoice.mutate(
+          { businessId, amount: Number(amount), description },
+          { onSuccess: () => setDone(true) }
+        );
+      }}
+      className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-5 shadow-sm"
+    >
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-bold text-text">{t('admin.invoiceCreateTitle')}</h2>
+        <button type="button" onClick={onClose} className="text-xs font-semibold text-text-muted">
+          {t('admin.close')}
+        </button>
+      </div>
+      <select
+        required
+        value={businessId}
+        onChange={(e) => setBusinessId(e.target.value)}
+        className="rounded-xl border border-border bg-bg px-3 py-2.5 text-sm text-text outline-none focus:border-primary"
+      >
+        <option value="" disabled>
+          {t('admin.invoiceCreateChooseBusiness')}
+        </option>
+        {businesses.map((b) => (
+          <option key={b._id} value={b._id}>
+            {b.name}
+          </option>
+        ))}
+      </select>
+      <input
+        required
+        type="number"
+        min={1}
+        step="0.01"
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        placeholder={t('admin.invoiceCreateAmountPlaceholder') as string}
+        className="rounded-xl border border-border bg-bg px-3 py-2.5 text-sm text-text outline-none focus:border-primary"
+      />
+      <input
+        required
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        placeholder={t('admin.invoiceCreateDescriptionPlaceholder') as string}
+        className="rounded-xl border border-border bg-bg px-3 py-2.5 text-sm text-text outline-none focus:border-primary"
+      />
+      {errorMessage && <p className="text-xs text-danger">{errorMessage}</p>}
+      <button
+        type="submit"
+        disabled={createInvoice.isPending || !businessId}
+        className="self-start rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white transition hover:bg-primary-hover disabled:opacity-60"
+      >
+        {t('admin.invoiceCreateSubmit')}
+      </button>
+    </form>
+  );
+}
 
 export default function AdminInvoicesPage() {
   return (
@@ -35,6 +132,7 @@ function AdminInvoicesPageInner() {
   const searchParams = useSearchParams();
   const business = searchParams.get('business') ?? undefined;
   const [status, setStatus] = useState<(typeof FILTERS)[number]>('AWAITING_VERIFICATION');
+  const [showCreateForm, setShowCreateForm] = useState(false);
   const { data, isLoading } = useAdminInvoices(business ? { business } : { status });
   const { data: overview, isLoading: overviewLoading } = useAdminFinanceOverview();
   const markPaid = useMarkInvoicePaid();
@@ -66,7 +164,19 @@ function AdminInvoicesPageInner() {
           <ArrowLeft size={14} /> {t('admin.backToBusiness')}
         </Link>
       )}
-      <h1 className="font-display text-2xl font-bold tracking-tight text-text">{t('admin.invoices')}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h1 className="font-display text-2xl font-bold tracking-tight text-text">{t('admin.invoices')}</h1>
+        {!business && !showCreateForm && (
+          <button
+            onClick={() => setShowCreateForm(true)}
+            className="rounded-xl bg-primary px-4 py-2 text-xs font-bold text-white transition hover:bg-primary-hover"
+          >
+            {t('admin.invoiceCreateOpen')}
+          </button>
+        )}
+      </div>
+
+      {!business && showCreateForm && <CreateInvoiceForm onClose={() => setShowCreateForm(false)} />}
 
       {!business && (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -115,7 +225,12 @@ function AdminInvoicesPageInner() {
                 <div className="flex items-center justify-between">
                   <div>
                     <div className="text-sm font-semibold text-text">
-                      {businessName} · {inv.month}
+                      {businessName} · {inv.type === 'MANUAL' ? inv.description : inv.month}
+                      {inv.type === 'MANUAL' && (
+                        <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                          {t('admin.invoiceManualBadge')}
+                        </span>
+                      )}
                     </div>
                     <div className="text-xs text-text-muted">
                       {t('admin.invoiceDue', { date: new Date(inv.dueAt).toLocaleDateString() })}

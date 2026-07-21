@@ -88,9 +88,12 @@ import {
   registerClient,
   verifyRegistrationCode,
   resendVerificationCode,
+  forgotPassword,
+  resetPassword,
   rejectAdminBusiness,
   rejectAdminCategory,
   rejectAdminInvoiceReceipt,
+  createAdminInvoice,
   rejectAdminReview,
   rejectAdminTopPlacement,
   removeAdminReviewReply,
@@ -142,7 +145,6 @@ import {
   fetchBusinessExpenses,
   createExpense,
   deleteExpense,
-  fetchWeekAvailability,
   fetchMetricDefinitions,
   createMetricDefinition,
   updateMetricDefinition,
@@ -152,6 +154,13 @@ import {
   fetchLedgerReport,
   type ReportPeriod,
   fetchServiceWeekAvailability,
+  fetchPlatformMetricDefinitions,
+  createPlatformMetricDefinition,
+  updatePlatformMetricDefinition,
+  deletePlatformMetricDefinition,
+  fetchMonthPlatformLedger,
+  updateMonthPlatformLedger,
+  fetchPlatformLedgerReport,
 } from './utils/api';
 
 export function useCategories() {
@@ -247,6 +256,14 @@ export function useVerifyRegistrationCode() {
 
 export function useResendVerificationCode() {
   return useMutation({ mutationFn: resendVerificationCode });
+}
+
+export function useForgotPassword() {
+  return useMutation({ mutationFn: forgotPassword });
+}
+
+export function useResetPassword() {
+  return useMutation({ mutationFn: resetPassword });
 }
 
 export function useLogout() {
@@ -486,7 +503,6 @@ function useBusinessBookingMutation(fn: (id: string) => Promise<unknown>) {
       qc.invalidateQueries({ queryKey: ['business-bookings'] });
       qc.invalidateQueries({ queryKey: ['business-stats'] });
       qc.invalidateQueries({ queryKey: ['business-analytics'] });
-      qc.invalidateQueries({ queryKey: ['week-availability'] });
       qc.invalidateQueries({ queryKey: ['service-week-availability'] });
     },
   });
@@ -513,7 +529,6 @@ export function useUpdateBookingDuration() {
       qc.invalidateQueries({ queryKey: ['business-bookings'] });
       qc.invalidateQueries({ queryKey: ['business-stats'] });
       qc.invalidateQueries({ queryKey: ['business-analytics'] });
-      qc.invalidateQueries({ queryKey: ['week-availability'] });
       qc.invalidateQueries({ queryKey: ['service-week-availability'] });
     },
   });
@@ -525,7 +540,6 @@ export function useAssignBookingStaff() {
     mutationFn: ({ id, staffId }: { id: string; staffId: string }) => assignBusinessBookingStaff(id, staffId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['business-bookings'] });
-      qc.invalidateQueries({ queryKey: ['week-availability'] });
       qc.invalidateQueries({ queryKey: ['service-week-availability'] });
     },
   });
@@ -545,7 +559,6 @@ export function useRescheduleBusinessBooking() {
       qc.invalidateQueries({ queryKey: ['business-bookings'] });
       qc.invalidateQueries({ queryKey: ['business-stats'] });
       qc.invalidateQueries({ queryKey: ['business-analytics'] });
-      qc.invalidateQueries({ queryKey: ['week-availability'] });
       qc.invalidateQueries({ queryKey: ['service-week-availability'] });
     },
   });
@@ -1049,6 +1062,14 @@ export function useRejectInvoiceReceipt() {
   });
 }
 
+export function useCreateAdminInvoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createAdminInvoice,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-invoices'] }),
+  });
+}
+
 export function useAdminFinanceOverview() {
   return useQuery({ queryKey: ['admin-finance-overview'], queryFn: fetchAdminFinanceOverview });
 }
@@ -1112,7 +1133,8 @@ export function useAdminSupportThread(id: string | null) {
 export function useSendAdminSupportMessage() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, text }: { id: string; text: string }) => sendAdminSupportMessage(id, text),
+    mutationFn: ({ id, text, image }: { id: string; text?: string; image?: File }) =>
+      sendAdminSupportMessage(id, { text, image }),
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ['admin-support-thread', vars.id] });
       qc.invalidateQueries({ queryKey: ['admin-support-threads'] });
@@ -1272,19 +1294,70 @@ export function useLedgerReport(period: ReportPeriod, endMonth?: string) {
   return useQuery({ queryKey: ['ledger-report', period, endMonth ?? ''], queryFn: () => fetchLedgerReport(period, endMonth) });
 }
 
+// ---- Platform ledger (super-admin) ----
+
+export function usePlatformMetricDefinitions() {
+  return useQuery({ queryKey: ['platform-metric-definitions'], queryFn: fetchPlatformMetricDefinitions });
+}
+
+export function useCreatePlatformMetricDefinition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: createPlatformMetricDefinition,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['platform-metric-definitions'] });
+      qc.invalidateQueries({ queryKey: ['month-platform-ledger'] });
+    },
+  });
+}
+
+export function useUpdatePlatformMetricDefinition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...payload }: { id: string; label?: string; group?: string; unit?: string; persistence?: string }) =>
+      updatePlatformMetricDefinition(id, payload as never),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['platform-metric-definitions'] });
+      qc.invalidateQueries({ queryKey: ['month-platform-ledger'] });
+    },
+  });
+}
+
+export function useDeletePlatformMetricDefinition() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: deletePlatformMetricDefinition,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['platform-metric-definitions'] });
+      qc.invalidateQueries({ queryKey: ['month-platform-ledger'] });
+    },
+  });
+}
+
+export function useMonthPlatformLedger(month: string) {
+  return useQuery({ queryKey: ['month-platform-ledger', month], queryFn: () => fetchMonthPlatformLedger(month) });
+}
+
+export function useUpdateMonthPlatformLedger() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ month, values }: { month: string; values: Record<string, string | number> }) => updateMonthPlatformLedger(month, values),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['month-platform-ledger'] }),
+  });
+}
+
+export function usePlatformLedgerReport(period: ReportPeriod, endMonth?: string) {
+  return useQuery({
+    queryKey: ['platform-ledger-report', period, endMonth ?? ''],
+    queryFn: () => fetchPlatformLedgerReport(period, endMonth),
+  });
+}
+
 export function useServiceWeekAvailability(serviceId: string | null, weekStart: string) {
   return useQuery({
     queryKey: ['service-week-availability', serviceId, weekStart],
     queryFn: () => fetchServiceWeekAvailability(serviceId as string, weekStart),
     enabled: !!serviceId,
-  });
-}
-
-export function useWeekAvailability(staffId: string | null, weekStart: string, serviceId?: string) {
-  return useQuery({
-    queryKey: ['week-availability', staffId, weekStart, serviceId ?? ''],
-    queryFn: () => fetchWeekAvailability(staffId as string, weekStart, serviceId),
-    enabled: !!staffId,
   });
 }
 

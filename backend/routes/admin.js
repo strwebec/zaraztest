@@ -24,10 +24,17 @@ const { runDailySweep } = require('../jobs/autoUnblock');
 const { runSheetsSync } = require('../jobs/sheetsSync');
 const { recomputeBusinessReviewStats } = require('../utils/reviewStats');
 const { computeBusinessRating } = require('../utils/businessRating');
+const { sendMail } = require('../utils/mailer');
 const { logAdminAction } = require('../utils/auditLog');
 const { customCategorySlug } = require('../utils/slugify');
 const { findDuplicateCategory } = require('../utils/categoryDedup');
 const AdminAuditLog = require('../models/AdminAuditLog');
+const PlatformMetricDefinition = require('../models/PlatformMetricDefinition');
+const MonthlyPlatformLedgerEntry = require('../models/MonthlyPlatformLedgerEntry');
+const { encryptValue } = require('../utils/ledgerCrypto');
+const { computeMonthMetrics: computePlatformMonthMetrics } = require('../utils/platformLedgerCalc');
+const { buildInsights: buildPlatformInsights, buildPeriodInsights: buildPlatformPeriodInsights } = require('../utils/platformLedgerInsights');
+const crypto = require('crypto');
 
 const router = express.Router();
 
@@ -704,6 +711,69 @@ router.get(
   })
 );
 
+// A one-off invoice for a specific business, separate from the automatic monthly
+// commission run (jobs/monthlyInvoices.js) — e.g. a manual adjustment or a charge
+// unrelated to booking commissions. Shares the same status lifecycle and the
+// business's existing confirm-payment + receipt-upload flow (POST
+// /business/invoices/:id/confirm-payment) and this router's mark-paid/reject-receipt
+// routes above/below untouched — nothing there distinguishes invoice type.
+router.post(
+  '/invoices',
+  requirePermission('finance'),
+  asyncHandler(async (req, res) => {
+    const { businessId, amount, description } = req.body || {};
+    if (
+      typeof businessId !== 'string' ||
+      typeof amount !== 'number' ||
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      typeof description !== 'string' ||
+      !description.trim()
+    ) {
+      return res.status(400).json({ error: 'INVALID_INPUT' });
+    }
+
+    const business = await Business.findById(businessId);
+    if (!business) return res.status(404).json({ error: 'NOT_FOUND' });
+
+    const issuedAt = new Date();
+    const dueAt = new Date(issuedAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const trimmedDescription = description.trim();
+    const totalCommission = Math.round(amount * 100) / 100;
+
+    const invoice = await Invoice.create({
+      business: business._id,
+      type: 'MANUAL',
+      description: trimmedDescription,
+      month: issuedAt.toISOString().slice(0, 7),
+      items: [],
+      totalCommission,
+      status: 'PENDING',
+      issuedAt,
+      dueAt,
+    });
+
+    const owner = await User.findById(business.owner).lean();
+    if (owner) {
+      await sendMail({
+        to: owner.email,
+        subject: 'Новий рахунок — ZARAZ',
+        html: `Вам виставлено рахунок: ${trimmedDescription} — ${totalCommission}₴. Оплатіть протягом 7 днів у кабінеті бізнесу (розділ "Рахунки").`,
+      });
+    }
+
+    await logAdminAction(req, {
+      action: 'invoice.createManual',
+      targetType: 'Invoice',
+      targetId: invoice._id,
+      targetLabel: business.name,
+      meta: { amount: totalCommission, description: trimmedDescription },
+    });
+
+    res.status(201).json({ invoice });
+  })
+);
+
 router.post(
   '/invoices/:id/mark-paid',
   requirePermission('finance'),
@@ -1192,6 +1262,185 @@ router.get(
       .limit(200)
       .lean();
     res.json({ entries });
+  })
+);
+
+// ---- Platform ledger: what the platform earned → owner payout, from A to Z ----
+// Mirrors routes/businessCrm.js's ledger design (configurable columns, encrypted
+// manual values, recurring vs monthly persistence) but at the platform level: auto
+// revenue is real collected cash (paid Invoices + confirmed TOP-placement payments,
+// see utils/platformLedgerCalc.js), and the owner records salaries/taxes/other costs
+// against it to land on totals.netPayout — the actual bank-account figure.
+
+const PLATFORM_METRIC_GROUPS = ['revenue', 'expense', 'info'];
+const PLATFORM_METRIC_UNITS = ['currency', 'number', 'percent', 'text'];
+const PLATFORM_METRIC_PERSISTENCE = ['monthly', 'recurring'];
+const PLATFORM_MONTH_RE = /^\d{4}-\d{2}$/;
+const PLATFORM_REPORT_PERIOD_MONTHS = { month: 1, quarter: 3, 'half-year': 6, '9-months': 9, year: 12 };
+
+function generatePlatformFieldKey() {
+  return `pfield-${crypto.randomBytes(4).toString('hex')}`;
+}
+
+function currentPlatformMonthKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function addPlatformMonths(monthKey, delta) {
+  const [y, m] = monthKey.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+router.get(
+  '/platform-ledger/metric-definitions',
+  requirePermission('finance'),
+  asyncHandler(async (req, res) => {
+    const includeArchived = req.query.includeArchived === '1';
+    const filter = {};
+    if (!includeArchived) filter.archived = { $ne: true };
+    const definitions = await PlatformMetricDefinition.find(filter).sort({ order: 1 }).lean();
+    res.json({ definitions });
+  })
+);
+
+router.post(
+  '/platform-ledger/metric-definitions',
+  requirePermission('finance'),
+  asyncHandler(async (req, res) => {
+    const { label, group, unit, persistence } = req.body || {};
+    if (typeof label !== 'string' || !label.trim()) return res.status(400).json({ error: 'INVALID_INPUT' });
+    if (!PLATFORM_METRIC_GROUPS.includes(group)) return res.status(400).json({ error: 'INVALID_INPUT' });
+    if (!PLATFORM_METRIC_UNITS.includes(unit)) return res.status(400).json({ error: 'INVALID_INPUT' });
+    if (!PLATFORM_METRIC_PERSISTENCE.includes(persistence)) return res.status(400).json({ error: 'INVALID_INPUT' });
+
+    const key = generatePlatformFieldKey();
+    const count = await PlatformMetricDefinition.countDocuments({});
+
+    try {
+      const definition = await PlatformMetricDefinition.create({ key, label: label.trim(), group, unit, persistence, order: count });
+      await logAdminAction(req, { action: 'platformLedger.createMetric', targetType: 'PlatformMetricDefinition', targetId: definition._id, targetLabel: definition.label });
+      res.status(201).json({ definition });
+    } catch (err) {
+      if (err.code === 11000) return res.status(409).json({ error: 'FIELD_EXISTS' });
+      throw err;
+    }
+  })
+);
+
+router.patch(
+  '/platform-ledger/metric-definitions/:id',
+  requirePermission('finance'),
+  asyncHandler(async (req, res) => {
+    const update = {};
+    if (typeof req.body?.label === 'string' && req.body.label.trim()) update.label = req.body.label.trim();
+    if (PLATFORM_METRIC_GROUPS.includes(req.body?.group)) update.group = req.body.group;
+    if (PLATFORM_METRIC_UNITS.includes(req.body?.unit)) update.unit = req.body.unit;
+    if (PLATFORM_METRIC_PERSISTENCE.includes(req.body?.persistence)) update.persistence = req.body.persistence;
+    if (typeof req.body?.order === 'number') update.order = req.body.order;
+
+    const definition = await PlatformMetricDefinition.findOneAndUpdate({ _id: req.params.id }, update, { new: true });
+    if (!definition) return res.status(404).json({ error: 'NOT_FOUND' });
+    res.json({ definition });
+  })
+);
+
+// Soft-delete only, same reasoning as the business ledger: archiving stops a column
+// from appearing in future data entry, but preserves its historical values.
+router.delete(
+  '/platform-ledger/metric-definitions/:id',
+  requirePermission('finance'),
+  asyncHandler(async (req, res) => {
+    const definition = await PlatformMetricDefinition.findOneAndUpdate({ _id: req.params.id }, { archived: true }, { new: true });
+    if (!definition) return res.status(404).json({ error: 'NOT_FOUND' });
+    await logAdminAction(req, { action: 'platformLedger.archiveMetric', targetType: 'PlatformMetricDefinition', targetId: definition._id, targetLabel: definition.label });
+    res.json({ ok: true });
+  })
+);
+
+router.get(
+  '/platform-ledger/:month',
+  requirePermission('finance'),
+  asyncHandler(async (req, res) => {
+    const month = req.params.month;
+    if (!PLATFORM_MONTH_RE.test(month)) return res.status(400).json({ error: 'INVALID_INPUT' });
+
+    const definitions = await PlatformMetricDefinition.find({ archived: { $ne: true } }).sort({ order: 1 }).lean();
+
+    const current = await computePlatformMonthMetrics(month, definitions);
+    const previousMonth = addPlatformMonths(month, -1);
+    const previous = await computePlatformMonthMetrics(previousMonth, definitions);
+    const insights = buildPlatformInsights(current, previous);
+
+    res.json({ ...current, previousMonth: previous.month, insights });
+  })
+);
+
+router.patch(
+  '/platform-ledger/:month',
+  requirePermission('finance'),
+  asyncHandler(async (req, res) => {
+    const month = req.params.month;
+    if (!PLATFORM_MONTH_RE.test(month)) return res.status(400).json({ error: 'INVALID_INPUT' });
+    if (!req.body?.values || typeof req.body.values !== 'object') return res.status(400).json({ error: 'INVALID_INPUT' });
+
+    const definitions = await PlatformMetricDefinition.find({ archived: { $ne: true } }).select('key').lean();
+    const validKeys = new Set(definitions.map((d) => d.key));
+
+    const entry = await MonthlyPlatformLedgerEntry.findOneAndUpdate(
+      { month },
+      { $setOnInsert: { month } },
+      { new: true, upsert: true }
+    );
+
+    for (const [key, value] of Object.entries(req.body.values)) {
+      if (!validKeys.has(key)) continue;
+      entry.values.set(key, encryptValue(value));
+    }
+    await entry.save();
+    await logAdminAction(req, { action: 'platformLedger.updateValues', targetType: 'MonthlyPlatformLedgerEntry', targetLabel: month });
+
+    res.json({ ok: true });
+  })
+);
+
+router.get(
+  '/platform-ledger/reports/:period',
+  requirePermission('finance'),
+  asyncHandler(async (req, res) => {
+    const monthsSpan = PLATFORM_REPORT_PERIOD_MONTHS[req.params.period];
+    if (!monthsSpan) return res.status(400).json({ error: 'INVALID_INPUT' });
+
+    const endMonth = typeof req.query.end === 'string' && PLATFORM_MONTH_RE.test(req.query.end) ? req.query.end : currentPlatformMonthKey();
+    const definitions = await PlatformMetricDefinition.find({ archived: { $ne: true } }).sort({ order: 1 }).lean();
+
+    const months = Array.from({ length: monthsSpan }, (_, i) => addPlatformMonths(endMonth, -(monthsSpan - 1) + i));
+    const monthsMetrics = [];
+    for (const month of months) {
+      monthsMetrics.push(await computePlatformMonthMetrics(month, definitions));
+    }
+
+    const totals = monthsMetrics.reduce(
+      (acc, m) => ({
+        grossRevenue: acc.grossRevenue + m.totals.grossRevenue,
+        totalExpenses: acc.totalExpenses + m.totals.totalExpenses,
+        netPayout: acc.netPayout + m.totals.netPayout,
+        collectedCommission: acc.collectedCommission + m.auto.collectedCommission,
+        collectedTopPlacements: acc.collectedTopPlacements + m.auto.collectedTopPlacements,
+        accruedCommission: acc.accruedCommission + m.auto.accruedCommission,
+      }),
+      { grossRevenue: 0, totalExpenses: 0, netPayout: 0, collectedCommission: 0, collectedTopPlacements: 0, accruedCommission: 0 }
+    );
+    const marginPercent = totals.grossRevenue > 0 ? Math.round((totals.netPayout / totals.grossRevenue) * 1000) / 10 : 0;
+
+    res.json({
+      period: req.params.period,
+      endMonth,
+      months: monthsMetrics,
+      totals: { ...totals, marginPercent },
+      insights: buildPlatformPeriodInsights(monthsMetrics),
+    });
   })
 );
 

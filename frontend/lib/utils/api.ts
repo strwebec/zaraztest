@@ -268,6 +268,14 @@ export function resendVerificationCode(payload: { email: string }) {
   return apiPost<{ ok: boolean }>('/auth/resend-code', payload);
 }
 
+export function forgotPassword(payload: { email: string }) {
+  return apiPost<{ ok: boolean }>('/auth/forgot-password', payload);
+}
+
+export function resetPassword(payload: { email: string; code: string; newPassword: string }) {
+  return apiPost<{ user: User }>('/auth/reset-password', payload);
+}
+
 export function logout() {
   return apiPost<{ ok: boolean }>('/auth/logout');
 }
@@ -637,6 +645,8 @@ export type InvoiceItem = {
 export type Invoice = {
   _id: string;
   business: string | { _id: string; name: string };
+  type?: 'COMMISSION' | 'MANUAL';
+  description?: string;
   month: string;
   items: InvoiceItem[];
   totalCommission: number;
@@ -685,6 +695,10 @@ export function markAdminInvoicePaid(id: string) {
 
 export function rejectAdminInvoiceReceipt(id: string, reason?: string) {
   return apiPost<{ invoice: Invoice }>(`/admin/invoices/${id}/reject-receipt`, { reason });
+}
+
+export function createAdminInvoice(payload: { businessId: string; amount: number; description: string }) {
+  return apiPost<{ invoice: Invoice }>('/admin/invoices', payload);
 }
 
 export type PaymentRequisites = {
@@ -1129,6 +1143,7 @@ export type SupportMessage = {
   author: string;
   authorName: string;
   text: string;
+  imageUrl?: string;
   createdAt: string;
 };
 
@@ -1151,8 +1166,11 @@ export function fetchSupportThread() {
   return apiGet<{ thread: SupportThread | null; messages: SupportMessage[] }>('/support/thread');
 }
 
-export function sendSupportMessage(text: string) {
-  return apiPost<{ message: SupportMessage }>('/support/thread/messages', { text });
+export function sendSupportMessage(payload: { text?: string; image?: File }) {
+  const form = new FormData();
+  if (payload.text) form.append('text', payload.text);
+  if (payload.image) form.append('image', payload.image);
+  return apiUpload<{ message: SupportMessage }>('/support/thread/messages', form);
 }
 
 export function markSupportThreadRead() {
@@ -1167,8 +1185,11 @@ export function fetchAdminSupportThread(id: string) {
   return apiGet<{ thread: SupportThread; messages: SupportMessage[] }>(`/support/admin/threads/${id}`);
 }
 
-export function sendAdminSupportMessage(id: string, text: string) {
-  return apiPost<{ message: SupportMessage }>(`/support/admin/threads/${id}/messages`, { text });
+export function sendAdminSupportMessage(id: string, payload: { text?: string; image?: File }) {
+  const form = new FormData();
+  if (payload.text) form.append('text', payload.text);
+  if (payload.image) form.append('image', payload.image);
+  return apiUpload<{ message: SupportMessage }>(`/support/admin/threads/${id}/messages`, form);
 }
 
 export function resolveAdminSupportThread(id: string) {
@@ -1280,40 +1301,6 @@ export function createExpense(payload: { category: string; amount: number; date:
 
 export function deleteExpense(id: string) {
   return apiDelete<{ ok: boolean }>(`/business/expenses/${id}`);
-}
-
-export type AvailabilitySlotStatus = 'off' | 'free' | 'busy' | 'tight';
-
-export type AvailabilitySlot = {
-  time: string;
-  status: AvailabilitySlotStatus;
-  clientName?: string;
-  booking?: BusinessBooking;
-};
-
-export type WeekAvailabilityDay = {
-  date: string;
-  weekday: string;
-  working: boolean;
-  slots: AvailabilitySlot[];
-};
-
-export type WeekAvailability = {
-  staffId: string;
-  staffName: string;
-  serviceId: string | null;
-  durationMinutes: number;
-  gridStartHour: number;
-  gridEndHour: number;
-  stepMinutes: number;
-  weekStart: string;
-  days: WeekAvailabilityDay[];
-};
-
-export function fetchWeekAvailability(staffId: string, weekStart: string, serviceId?: string) {
-  const qs = new URLSearchParams({ from: weekStart });
-  if (serviceId) qs.set('serviceId', serviceId);
-  return apiGet<WeekAvailability>(`/business/staff/${staffId}/week-availability?${qs.toString()}`);
 }
 
 export type MergedAvailabilitySlot = { time: string; status: 'free' | 'busy' | 'off'; freeStaffIds: string[] };
@@ -1431,4 +1418,82 @@ export function updateMonthLedger(month: string, values: Record<string, string |
 export function fetchLedgerReport(period: ReportPeriod, endMonth?: string) {
   const qs = endMonth ? `?end=${endMonth}` : '';
   return apiGet<LedgerReport>(`/business/reports/${period}${qs}`);
+}
+
+// ---- Platform ledger: super-admin's own earnings → payout ledger ----
+
+export type PlatformMetricDefinition = {
+  _id: string;
+  key: string;
+  label: string;
+  group: MetricGroup;
+  unit: MetricUnit;
+  persistence: MetricPersistence;
+  order: number;
+  archived: boolean;
+};
+
+export type PlatformLedgerAutoStats = {
+  revenue: number;
+  collectedCommission: number;
+  collectedTopPlacements: number;
+  accruedCommission: number;
+  invoicesPaidCount: number;
+  topPlacementsPaidCount: number;
+};
+
+export type PlatformLedgerTotals = {
+  grossRevenue: number;
+  totalExpenses: number;
+  netPayout: number;
+  marginPercent: number;
+};
+
+export type MonthPlatformLedger = {
+  month: string;
+  auto: PlatformLedgerAutoStats;
+  manualFields: LedgerManualField[];
+  totals: PlatformLedgerTotals;
+  previousMonth: string;
+  insights: LedgerInsight[];
+};
+
+export type PlatformLedgerReport = {
+  period: ReportPeriod;
+  endMonth: string;
+  months: MonthPlatformLedger[];
+  totals: PlatformLedgerTotals & { collectedCommission: number; collectedTopPlacements: number; accruedCommission: number };
+  insights: LedgerInsight[];
+};
+
+export function fetchPlatformMetricDefinitions() {
+  return apiGet<{ definitions: PlatformMetricDefinition[] }>('/admin/platform-ledger/metric-definitions');
+}
+
+export function createPlatformMetricDefinition(payload: { label: string; group: MetricGroup; unit: MetricUnit; persistence: MetricPersistence }) {
+  return apiPost<{ definition: PlatformMetricDefinition }>('/admin/platform-ledger/metric-definitions', payload);
+}
+
+export function updatePlatformMetricDefinition(
+  id: string,
+  payload: Partial<{ label: string; group: MetricGroup; unit: MetricUnit; persistence: MetricPersistence; order: number }>
+) {
+  return apiPatch<{ definition: PlatformMetricDefinition }>(`/admin/platform-ledger/metric-definitions/${id}`, payload);
+}
+
+export function deletePlatformMetricDefinition(id: string) {
+  return apiDelete<{ ok: boolean }>(`/admin/platform-ledger/metric-definitions/${id}`);
+}
+
+export function fetchMonthPlatformLedger(month: string) {
+  return apiGet<MonthPlatformLedger>(`/admin/platform-ledger/${month}`);
+}
+
+export function updateMonthPlatformLedger(month: string, values: Record<string, string | number>) {
+  return apiPatch<{ ok: boolean }>(`/admin/platform-ledger/${month}`, { values });
+}
+
+export function fetchPlatformLedgerReport(period: ReportPeriod, endMonth?: string) {
+  const qs = endMonth ? `?end=${endMonth}` : '';
+  return apiGet<PlatformLedgerReport>(`/admin/platform-ledger/reports/${period}${qs}`);
 }

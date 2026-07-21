@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { LifeBuoy, Send, CheckCircle2, RotateCcw } from 'lucide-react';
+import { LifeBuoy, Send, CheckCircle2, RotateCcw, Paperclip, X } from 'lucide-react';
 import { RequireAdminRole } from '@/components/admin/RequireAdminRole';
 import { Skeleton } from '@/components/ui/Skeleton';
 import {
@@ -33,7 +33,9 @@ export default function AdminSupportPage() {
   const resolveThread = useResolveAdminSupportThread();
   const reopenThread = useReopenAdminSupportThread();
   const [text, setText] = useState('');
+  const [image, setImage] = useState<File | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const allThreads = listData?.threads ?? [];
   const threads = allThreads.filter((th) => bucketOf(th) === tab);
@@ -57,8 +59,11 @@ export default function AdminSupportPage() {
 
   function handleSend() {
     const trimmed = text.trim();
-    if (!trimmed || !selectedId) return;
-    sendMessage.mutate({ id: selectedId, text: trimmed });
+    if ((!trimmed && !image) || !selectedId) return;
+    sendMessage.mutate(
+      { id: selectedId, text: trimmed || undefined, image: image || undefined },
+      { onSuccess: () => setImage(null) }
+    );
     setText('');
   }
 
@@ -177,7 +182,12 @@ export default function AdminSupportPage() {
                         }`}
                       >
                         {m.from === 'admin' && <span className="text-xs font-bold opacity-70">{m.authorName}</span>}
-                        <p className="whitespace-pre-line leading-relaxed">{m.text}</p>
+                        {m.imageUrl && (
+                          <a href={m.imageUrl} target="_blank" rel="noopener noreferrer">
+                            <img src={m.imageUrl} alt="" className="max-h-56 max-w-full rounded-xl object-cover" />
+                          </a>
+                        )}
+                        {m.text && <p className="whitespace-pre-line leading-relaxed">{m.text}</p>}
                         <span className={`text-[10px] ${m.from === 'admin' ? 'text-white/70' : 'text-text-muted'}`}>
                           {new Date(m.createdAt).toLocaleString('uk-UA', {
                             day: '2-digit',
@@ -192,28 +202,52 @@ export default function AdminSupportPage() {
                   <div ref={bottomRef} />
                 </div>
 
-                <div className="flex items-end gap-2 border-t border-border p-3">
-                  <textarea
-                    value={text}
-                    onChange={(e) => setText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey) {
-                        e.preventDefault();
-                        handleSend();
-                      }
-                    }}
-                    placeholder={t('support.placeholder') as string}
-                    rows={1}
-                    className="max-h-32 flex-1 resize-none rounded-xl border border-border bg-bg px-3.5 py-2.5 text-sm text-text outline-none focus:border-primary"
-                  />
-                  <button
-                    onClick={handleSend}
-                    disabled={!text.trim() || sendMessage.isPending}
-                    aria-label={t('support.send') as string}
-                    className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-primary text-white transition hover:bg-primary-hover disabled:opacity-40"
-                  >
-                    <Send size={16} />
-                  </button>
+                <div className="flex flex-col gap-2 border-t border-border p-3">
+                  {image && (
+                    <div className="flex w-fit items-center gap-2 rounded-xl bg-bg px-3 py-1.5 text-xs text-text-muted">
+                      <span className="max-w-[200px] truncate">{image.name}</span>
+                      <button onClick={() => setImage(null)} aria-label={t('support.removeImage') as string}>
+                        <X size={13} />
+                      </button>
+                    </div>
+                  )}
+                  <div className="flex items-end gap-2">
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      className="hidden"
+                      onChange={(e) => setImage(e.target.files?.[0] ?? null)}
+                    />
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      aria-label={t('support.attachImage') as string}
+                      className="flex h-10 w-10 flex-none items-center justify-center rounded-xl border border-border text-text-muted transition hover:border-primary hover:text-primary"
+                    >
+                      <Paperclip size={16} />
+                    </button>
+                    <textarea
+                      value={text}
+                      onChange={(e) => setText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey) {
+                          e.preventDefault();
+                          handleSend();
+                        }
+                      }}
+                      placeholder={t('support.placeholder') as string}
+                      rows={1}
+                      className="max-h-32 flex-1 resize-none rounded-xl border border-border bg-bg px-3.5 py-2.5 text-sm text-text outline-none focus:border-primary"
+                    />
+                    <button
+                      onClick={handleSend}
+                      disabled={(!text.trim() && !image) || sendMessage.isPending}
+                      aria-label={t('support.send') as string}
+                      className="flex h-10 w-10 flex-none items-center justify-center rounded-xl bg-primary text-white transition hover:bg-primary-hover disabled:opacity-40"
+                    >
+                      <Send size={16} />
+                    </button>
+                  </div>
                 </div>
               </>
             )}

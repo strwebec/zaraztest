@@ -14,7 +14,9 @@ function previousMonthRange() {
 }
 
 async function generateInvoiceForBusiness(business, { month, from, to }) {
-  const existing = await Invoice.findOne({ business: business._id, month });
+  // Scoped to type: 'COMMISSION' — a manually-created invoice (routes/admin.js POST
+  // /invoices) for this same business/month must never block the automatic one.
+  const existing = await Invoice.findOne({ business: business._id, month, type: 'COMMISSION' });
   if (existing) return null;
 
   const bookings = await Booking.find({

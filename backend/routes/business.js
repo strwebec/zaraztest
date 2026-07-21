@@ -246,7 +246,7 @@ router.get(
       Booking.find({
         business: req.businessId,
         date: { $gte: monthStart, $lte: today },
-        status: 'completed',
+        status: { $in: ['confirmed', 'completed'] },
       }).lean(),
     ]);
 
@@ -475,6 +475,7 @@ router.post(
       const staffFilter = { business: req.businessId, active: true, virtual: { $ne: true } };
       if (service.staff?.length) staffFilter._id = { $in: service.staff };
       const candidates = await Staff.find(staffFilter).lean();
+      const reasons = [];
       for (const candidate of candidates) {
         // eslint-disable-next-line no-await-in-loop
         const reason = await slotUnavailableReason({
@@ -488,6 +489,7 @@ router.post(
           staff = candidate;
           break;
         }
+        reasons.push(reason);
       }
       if (!staff && !candidates.length) {
         const virtualStaff = await getOrCreateVirtualStaff(req.businessDoc);
@@ -499,8 +501,17 @@ router.post(
           bufferMinutes: req.businessDoc.bufferMinutes,
         });
         if (!reason) staff = virtualStaff;
+        else reasons.push(reason);
       }
-      if (!staff) return res.status(409).json({ error: 'SLOT_TAKEN' });
+      if (!staff) {
+        // Every eligible candidate was rejected for the exact same reason (e.g. all off
+        // that day, or the slot is outside working hours) — surface that specific reason
+        // instead of a blanket "just taken", which used to fire even when nobody was ever
+        // free to begin with and made the real cause impossible to tell from the message.
+        const uniqueReasons = [...new Set(reasons)];
+        const code = uniqueReasons.length === 1 ? reasonToErrorCode(uniqueReasons[0]) : 'SLOT_TAKEN';
+        return res.status(409).json({ error: code });
+      }
     }
 
     try {
