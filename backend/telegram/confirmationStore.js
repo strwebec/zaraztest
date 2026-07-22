@@ -35,7 +35,7 @@ function clearPending(chatId) {
   pending.delete(String(chatId));
 }
 
-const AFFIRMATIVE_RE = /^(так|підтверджую|підтвердити|confirm|yes|ок|окей)\.?!?$/i;
+const AFFIRMATIVE_RE = /^(так|підтверджую|підтвердити|підтверджуй|confirm|yes|ок|окей)\.?!?$/i;
 const NEGATIVE_RE = /^(ні|нi|скасувати|скасуй|cancel|no|відміна|відмінити)\.?!?$/i;
 
 // A reply to a pending confirmation is exactly one of three things — never a

@@ -108,7 +108,39 @@ async function executeConfirmed(action) {
     if (res.status >= 400) return `Не вдалося надати TOP: ${res.status} ${JSON.stringify(res.body)}`;
     return `Готово: TOP надано бізнесу "${action.businessName}" на ${action.durationDays} дн.`;
   }
+  // The two verbs below are only ever created by utils/telegramNotifier.js
+  // (Phase 5's proactive receipt push), never by a chat command — the admin
+  // is confirming a payment a business already claimed to have made, not
+  // asking the bot to invent an action.
+  if (action.verb === 'confirm-top') {
+    const res = await callAdminApi('POST', `/api/admin/top-placements/${action.id}/confirm`);
+    if (res.status >= 400) return `Не вдалося підтвердити TOP: ${res.status} ${JSON.stringify(res.body)}`;
+    return `TOP-розміщення підтверджено для "${action.businessName}".`;
+  }
+  if (action.verb === 'mark-paid-invoice') {
+    const res = await callAdminApi('POST', `/api/admin/invoices/${action.id}/mark-paid`);
+    if (res.status >= 400) return `Не вдалося підтвердити оплату: ${res.status} ${JSON.stringify(res.body)}`;
+    return `Оплату рахунку підтверджено для "${action.businessName}".`;
+  }
   return 'Невідома дія Finance Agent.';
+}
+
+// Only reachable via webhookRoute.js's "відхили [причина]" special-case for a
+// pending action that carries a `rejectVerb` (see telegramNotifier.js) — a
+// real reject-with-reason, distinct from "ні" cancelling the confirmation
+// outright and taking no action at all.
+async function executeRejected(action, reason) {
+  if (action.rejectVerb === 'reject-top') {
+    const res = await callAdminApi('POST', `/api/admin/top-placements/${action.id}/reject`, { reason });
+    if (res.status >= 400) return `Не вдалося відхилити: ${res.status} ${JSON.stringify(res.body)}`;
+    return `TOP-розміщення відхилено для "${action.businessName}".`;
+  }
+  if (action.rejectVerb === 'reject-receipt-invoice') {
+    const res = await callAdminApi('POST', `/api/admin/invoices/${action.id}/reject-receipt`, { reason });
+    if (res.status >= 400) return `Не вдалося відхилити: ${res.status} ${JSON.stringify(res.body)}`;
+    return `Квитанцію відхилено для "${action.businessName}".`;
+  }
+  return 'Невідома дія відхилення.';
 }
 
 const HELP_TEXT = [
@@ -119,4 +151,4 @@ const HELP_TEXT = [
   '"топ <назва бізнесу> на N днів" — надати TOP-розміщення',
 ].join('\n');
 
-module.exports = { handleCommand, executeConfirmed, HELP_TEXT };
+module.exports = { handleCommand, executeConfirmed, executeRejected, HELP_TEXT };

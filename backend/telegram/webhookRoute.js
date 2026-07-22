@@ -26,6 +26,28 @@ async function handleIncomingMessage(update) {
       await sendMessage(chatId, formatExpired());
       return;
     }
+
+    // Payment-receipt confirmations (Phase 5, see utils/telegramNotifier.js)
+    // carry a rejectVerb and support a third reply shape beyond confirm/ні:
+    // "відхили [причина]" is a real reject-with-reason action, not the same
+    // as "ні" (which just cancels — does nothing, admin can act manually
+    // later). Chat-command-originated pendings never set rejectVerb, so this
+    // never fires for those.
+    if (pending.action.rejectVerb) {
+      const rejectMatch = text.trim().match(/^відхили(?:\s+(.*))?$/i);
+      if (rejectMatch) {
+        clearPending(chatId);
+        let reply;
+        try {
+          reply = await AGENTS[pending.action.agent].executeRejected(pending.action, rejectMatch[1]);
+        } catch (err) {
+          reply = `Помилка виконання дії: ${err.message}`;
+        }
+        await sendMessage(chatId, reply);
+        return;
+      }
+    }
+
     const verdict = resolveReply(text);
     if (verdict === 'unclear') {
       // Deliberately don't clear or fall through to command parsing — the

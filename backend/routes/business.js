@@ -23,6 +23,7 @@ const { applyPhoneReveal } = require('../utils/phoneReveal');
 const { recomputeBusinessReviewStats } = require('../utils/reviewStats');
 const { getOrCreateVirtualStaff } = require('../utils/virtualStaff');
 const { isConfigured: sheetsConfigured, connectExistingSheet, extractSpreadsheetId } = require('../utils/googleSheets');
+const { notifyPaymentReceipt } = require('../utils/telegramNotifier');
 const Business = require('../models/Business');
 const Category = require('../models/Category');
 const PlatformSettings = require('../models/PlatformSettings');
@@ -904,6 +905,19 @@ router.post(
     await placement.save();
 
     res.json({ placement });
+
+    // Fire-and-forget, after the response — see utils/telegramNotifier.js's
+    // header comment for why this can never affect the line above.
+    notifyPaymentReceipt(
+      {
+        agent: 'finance',
+        verb: 'confirm-top',
+        rejectVerb: 'reject-top',
+        id: placement._id.toString(),
+        businessName: req.businessDoc.name,
+      },
+      `Бізнес "${req.businessDoc.name}" надіслав квитанцію за TOP-розміщення (${placement.package}, ${placement.amount} грн, ${placement.durationDays} дн.).\nПеревір надходження оплати.`
+    );
   })
 );
 
@@ -939,6 +953,19 @@ router.post(
     await invoice.save();
 
     res.json({ invoice });
+
+    // Fire-and-forget, after the response — see utils/telegramNotifier.js's
+    // header comment for why this can never affect the line above.
+    notifyPaymentReceipt(
+      {
+        agent: 'finance',
+        verb: 'mark-paid-invoice',
+        rejectVerb: 'reject-receipt-invoice',
+        id: invoice._id.toString(),
+        businessName: req.businessDoc.name,
+      },
+      `Бізнес "${req.businessDoc.name}" надіслав квитанцію за рахунком на ${invoice.totalCommission} грн (місяць ${invoice.month}).\nПеревір надходження оплати.`
+    );
   })
 );
 
