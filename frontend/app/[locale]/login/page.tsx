@@ -23,6 +23,7 @@ import type { Locale } from '@/lib/i18n';
 
 const ERROR_KEY: Record<string, string> = {
   INVALID_CREDENTIALS: 'auth.invalidCredentials',
+  ACCOUNT_LOCKED: 'auth.accountLocked',
   EMAIL_TAKEN: 'auth.emailTaken',
   WEAK_PASSWORD: 'auth.weakPassword',
   INVALID_CITY: 'auth.invalidCity',

@@ -8,6 +8,29 @@ const Service = require('../models/Service');
 const Staff = require('../models/Staff');
 const Booking = require('../models/Booking');
 
+// This script wipes every core collection unconditionally (see the
+// deleteMany calls below) and plants fresh demo accounts — it must never run
+// against a real database. NODE_ENV alone isn't a reliable enough guard for a
+// script invoked directly with `node`/`ts-node` (nothing sets it by default),
+// so this also refuses to run against anything that doesn't look like a local
+// MongoDB instance, unless explicitly overridden.
+function assertSafeToSeed() {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('[seed] refusing to run with NODE_ENV=production');
+    process.exit(1);
+  }
+  const uri = process.env.MONGODB_URI || '';
+  const looksLocal = /^mongodb:\/\/(127\.0\.0\.1|localhost)[:/]/.test(uri);
+  if (!looksLocal && process.env.SEED_ALLOW_REMOTE !== 'true') {
+    console.error(
+      `[seed] MONGODB_URI does not look like a local database (${uri.replace(/\/\/.*@/, '//<redacted>@')}). ` +
+        'Refusing to wipe it. Set SEED_ALLOW_REMOTE=true to override if this is really intended.'
+    );
+    process.exit(1);
+  }
+}
+
+
 const WEEK_SCHEDULE = {
   mon: { start: '09:00', end: '19:00' },
   tue: { start: '09:00', end: '19:00' },
@@ -19,6 +42,7 @@ const WEEK_SCHEDULE = {
 };
 
 async function seed() {
+  assertSafeToSeed();
   await connectDB();
 
   await Promise.all([
@@ -32,6 +56,10 @@ async function seed() {
 
   const stryi = await City.create({ slug: 'stryi', name: 'Стрий', nameEn: 'Stryi', lat: 49.2597, lng: 23.8586 });
 
+  // Fixed, well-known credential — deliberately NOT randomized: tests/fixtures/users.ts
+  // and README.md both hardcode this exact password for local/E2E login. Safe only
+  // because assertSafeToSeed() above refuses to run this script against anything but
+  // a local database.
   const superAdminPasswordHash = await bcrypt.hash('SuperAdmin123!', 12);
   await User.create({
     role: 'SUPER_ADMIN',

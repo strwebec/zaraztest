@@ -86,11 +86,20 @@ async function runMonthlyInvoices() {
   const range = previousMonthRange();
   const businesses = await Business.find({ status: { $in: ['ACTIVE', 'HIDDEN'] } }).lean();
   let created = 0;
+  let failed = 0;
   for (const business of businesses) {
-    const invoice = await generateInvoiceForBusiness(business, range);
-    if (invoice) created += 1;
+    // One business failing (e.g. a duplicate-key error if this run raced another
+    // instance of the same cron) must not abort the whole batch — every other
+    // business still needs its invoice generated this month.
+    try {
+      const invoice = await generateInvoiceForBusiness(business, range);
+      if (invoice) created += 1;
+    } catch (err) {
+      failed += 1;
+      console.error(`[monthlyInvoices] failed for business ${business._id}:`, err.message);
+    }
   }
-  console.log(`[monthlyInvoices] generated ${created} invoices for ${range.month}`);
+  console.log(`[monthlyInvoices] generated ${created} invoices for ${range.month}${failed ? `, ${failed} failed` : ''}`);
 }
 
 module.exports = { runMonthlyInvoices, generateInvoiceForBusiness, previousMonthRange, isInvoiceGenerationDay };

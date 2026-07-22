@@ -137,7 +137,16 @@ router.patch(
     const update = {};
     if (typeof req.body?.notes === 'string') update.notes = req.body.notes.slice(0, 4000);
     if (req.body?.customFieldValues && typeof req.body.customFieldValues === 'object') {
-      update.customFieldValues = req.body.customFieldValues;
+      // Mirrors the ledger route's validKeys check below — without it, a caller
+      // could stash arbitrary junk keys on a client record instead of only the
+      // fields this business actually defined for itself.
+      const fieldDefs = await CustomFieldDefinition.find({ business: req.businessId }).select('key').lean();
+      const validKeys = new Set(fieldDefs.map((d) => d.key));
+      const filtered = {};
+      for (const [key, value] of Object.entries(req.body.customFieldValues)) {
+        if (validKeys.has(key)) filtered[key] = value;
+      }
+      update.customFieldValues = filtered;
     }
 
     const client = await BusinessClient.findOneAndUpdate(

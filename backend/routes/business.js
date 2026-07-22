@@ -1049,6 +1049,18 @@ router.patch(
       }
     }
 
+    // Mirrors the POST /services validation — without this, the update allowlist
+    // above would let a caller set `category` to any string at all, bypassing the
+    // approved-category / pending-moderation flow entirely. The edit UI never
+    // offers a category field, so this only ever matters for direct API calls.
+    if ('category' in update) {
+      if (typeof update.category !== 'string' || !update.category.trim()) {
+        return res.status(400).json({ error: 'INVALID_INPUT' });
+      }
+      const existingCategory = await Category.findOne({ slug: update.category, status: 'ACTIVE' });
+      if (!existingCategory) return res.status(400).json({ error: 'INVALID_CATEGORY' });
+    }
+
     const service = await Service.findOneAndUpdate(
       { _id: req.params.id, business: req.businessId },
       update,

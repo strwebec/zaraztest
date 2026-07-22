@@ -24,7 +24,22 @@ if (!resend && process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMT
   });
 }
 
+// In production, printing the full HTML body would leak whatever the email is
+// confirming — a 6-digit verification/password-reset code, an invoice amount —
+// straight into the hosting provider's log stream, readable by anyone with log
+// access, for as long as those logs are retained. Only dev/test environments
+// (where nothing sensitive is really being protected) get the full body; a
+// misconfigured production deploy instead gets a loud warning with no secret
+// in it, so the missing provider config gets noticed and fixed rather than
+// silently compensated for by leaking codes into logs.
 function logDevFallback(to, subject, html) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error(
+      `[mailer] no email provider configured — email to ${to} ("${subject}") was NOT sent. ` +
+        'Set RESEND_API_KEY or SMTP_HOST/SMTP_USER/SMTP_PASS.'
+    );
+    return;
+  }
   console.log(`[mailer:dev-fallback] would send email to ${to}\nSubject: ${subject}\n${html}`);
 }
 

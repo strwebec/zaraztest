@@ -26,6 +26,7 @@ const { runSheetsSync } = require('../jobs/sheetsSync');
 const { recomputeBusinessReviewStats } = require('../utils/reviewStats');
 const { computeBusinessRating } = require('../utils/businessRating');
 const { sendMail } = require('../utils/mailer');
+const { escapeHtml } = require('../utils/escapeHtml');
 const { logAdminAction } = require('../utils/auditLog');
 const { customCategorySlug, customCitySlug } = require('../utils/slugify');
 const { findDuplicateCategory } = require('../utils/categoryDedup');
@@ -50,23 +51,40 @@ const onlySuperAdmin = requireRole('SUPER_ADMIN');
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const INVITABLE_ROLES = ['MODERATOR', 'FINANCE_ADMIN', 'ADMIN'];
 
+// Neither bucket alone should imply the other — a MODERATOR (has 'businesses')
+// must not see financial totals, and a FINANCE_ADMIN (has only 'finance') must
+// not see business/client counts. Both dashboards mirror the same
+// conditionally-zeroed pattern already used by /pending-counts below, rather
+// than a hard 403, so each admin role still gets a working dashboard scoped to
+// whatever it's actually allowed to see.
+function requireOverviewAccess(req, res, next) {
+  const canBusinesses = hasAdminPermission(req.userRole, req.userPermissions, 'businesses');
+  const canFinance = hasAdminPermission(req.userRole, req.userPermissions, 'finance');
+  if (!canBusinesses && !canFinance) return res.status(403).json({ error: 'FORBIDDEN' });
+  req.canBusinesses = canBusinesses;
+  req.canFinance = canFinance;
+  next();
+}
+
 router.get(
   '/overview',
-  asyncHandler(async (_req, res) => {
+  requireOverviewAccess,
+  asyncHandler(async (req, res) => {
     const monthStart = `${new Date().toISOString().slice(0, 7)}-01`;
+    const { canBusinesses, canFinance } = req;
 
     const [activeBusinesses, pendingBusinesses, clients, completedBookingsCount, monthBookings] = await Promise.all([
-      Business.countDocuments({ status: 'ACTIVE' }),
-      Business.countDocuments({ status: 'PENDING' }),
-      User.countDocuments({ role: 'CLIENT' }),
-      Booking.countDocuments({ status: 'completed' }),
+      canBusinesses ? Business.countDocuments({ status: 'ACTIVE' }) : Promise.resolve(0),
+      canBusinesses ? Business.countDocuments({ status: 'PENDING' }) : Promise.resolve(0),
+      canBusinesses ? User.countDocuments({ role: 'CLIENT' }) : Promise.resolve(0),
+      canBusinesses ? Booking.countDocuments({ status: 'completed' }) : Promise.resolve(0),
       // "Platform revenue" on the dashboard is the current month's commission, not an
       // all-time cumulative total — an ever-growing lifetime figure reads as frozen
       // month to month even while money is actively coming in. For other periods, the
       // admin uses Analytics, which already breaks revenue down by any date range.
-      Booking.find({ status: 'completed', date: { $gte: monthStart } })
-        .select('price commissionRate')
-        .lean(),
+      canFinance
+        ? Booking.find({ status: 'completed', date: { $gte: monthStart } }).select('price commissionRate').lean()
+        : Promise.resolve([]),
     ]);
 
     const platformRevenue = monthBookings.reduce((sum, b) => sum + b.price * (b.commissionRate ?? 0), 0);
@@ -85,7 +103,9 @@ const ANALYTICS_RANGES = [7, 30, 90];
 
 router.get(
   '/analytics',
+  requireOverviewAccess,
   asyncHandler(async (req, res) => {
+    const { canBusinesses, canFinance } = req;
     const requestedDays = Number(req.query.days);
     const rangeDays = ANALYTICS_RANGES.includes(requestedDays) ? requestedDays : 30;
 
@@ -96,36 +116,42 @@ router.get(
     const currentMonth = todayKey.slice(0, 7);
 
     const [newBusinesses, newClients, completedBookings, categoryAgg, outstandingAgg, paidThisMonthAgg, overdueCount, topBusinessesAgg] = await Promise.all([
-      Business.find({ createdAt: { $gte: since } }).select('createdAt').lean(),
-      User.find({ role: 'CLIENT', createdAt: { $gte: since } }).select('createdAt').lean(),
+      canBusinesses ? Business.find({ createdAt: { $gte: since } }).select('createdAt').lean() : Promise.resolve([]),
+      canBusinesses ? User.find({ role: 'CLIENT', createdAt: { $gte: since } }).select('createdAt').lean() : Promise.resolve([]),
       Booking.find({ status: 'completed', date: { $gte: sinceKey, $lte: todayKey } })
         .select('date price commissionRate')
         .lean(),
-      Business.aggregate([{ $group: { _id: '$category', count: { $sum: 1 } } }]),
-      Invoice.aggregate([
-        { $match: { status: { $in: ['PENDING', 'AWAITING_VERIFICATION', 'OVERDUE'] } } },
-        { $group: { _id: null, total: { $sum: '$totalCommission' } } },
-      ]),
-      Invoice.aggregate([
-        { $match: { status: 'PAID', month: currentMonth } },
-        { $group: { _id: null, total: { $sum: '$totalCommission' } } },
-      ]),
-      Invoice.countDocuments({ status: 'OVERDUE' }),
-      Booking.aggregate([
-        { $match: { status: 'completed', date: { $gte: sinceKey, $lte: todayKey } } },
-        {
-          $group: {
-            _id: '$business',
-            bookings: { $sum: 1 },
-            revenue: { $sum: { $multiply: ['$price', { $ifNull: ['$commissionRate', 0] }] } },
-          },
-        },
-        { $sort: { revenue: -1 } },
-        { $limit: 8 },
-        { $lookup: { from: 'businesses', localField: '_id', foreignField: '_id', as: 'business' } },
-        { $unwind: '$business' },
-        { $project: { name: '$business.name', bookings: 1, revenue: 1 } },
-      ]),
+      canBusinesses ? Business.aggregate([{ $group: { _id: '$category', count: { $sum: 1 } } }]) : Promise.resolve([]),
+      canFinance
+        ? Invoice.aggregate([
+            { $match: { status: { $in: ['PENDING', 'AWAITING_VERIFICATION', 'OVERDUE'] } } },
+            { $group: { _id: null, total: { $sum: '$totalCommission' } } },
+          ])
+        : Promise.resolve([]),
+      canFinance
+        ? Invoice.aggregate([
+            { $match: { status: 'PAID', month: currentMonth } },
+            { $group: { _id: null, total: { $sum: '$totalCommission' } } },
+          ])
+        : Promise.resolve([]),
+      canFinance ? Invoice.countDocuments({ status: 'OVERDUE' }) : Promise.resolve(0),
+      canFinance
+        ? Booking.aggregate([
+            { $match: { status: 'completed', date: { $gte: sinceKey, $lte: todayKey } } },
+            {
+              $group: {
+                _id: '$business',
+                bookings: { $sum: 1 },
+                revenue: { $sum: { $multiply: ['$price', { $ifNull: ['$commissionRate', 0] }] } },
+              },
+            },
+            { $sort: { revenue: -1 } },
+            { $limit: 8 },
+            { $lookup: { from: 'businesses', localField: '_id', foreignField: '_id', as: 'business' } },
+            { $unwind: '$business' },
+            { $project: { name: '$business.name', bookings: 1, revenue: 1 } },
+          ])
+        : Promise.resolve([]),
     ]);
 
     const byDay = new Map();
@@ -147,16 +173,18 @@ router.get(
     for (const b of completedBookings) {
       const bucket = byDay.get(b.date);
       if (bucket) {
-        bucket.completedBookings += 1;
-        bucket.revenue += b.price * (b.commissionRate ?? 0);
+        if (canBusinesses) bucket.completedBookings += 1;
+        if (canFinance) bucket.revenue += b.price * (b.commissionRate ?? 0);
       }
     }
 
     const categoryBreakdown = categoryAgg.map((c) => ({ category: c._id, count: c.count }));
     const topBusinesses = topBusinessesAgg.map((b) => ({ name: b.name, bookings: b.bookings, revenue: b.revenue }));
 
-    const totalGMV = completedBookings.reduce((sum, b) => sum + b.price, 0);
-    const totalPlatformRevenue = completedBookings.reduce((sum, b) => sum + b.price * (b.commissionRate ?? 0), 0);
+    const totalGMV = canFinance ? completedBookings.reduce((sum, b) => sum + b.price, 0) : 0;
+    const totalPlatformRevenue = canFinance
+      ? completedBookings.reduce((sum, b) => sum + b.price * (b.commissionRate ?? 0), 0)
+      : 0;
 
     res.json({
       daily: [...byDay.values()],
@@ -577,16 +605,27 @@ router.post(
   asyncHandler(async (req, res) => {
     // Admin can fast-track activation once the business has confirmed payment
     // (AWAITING_ACTIVATION), instead of waiting for the 15-minute auto-activation timer.
-    const placement = await TopPlacement.findOne({ _id: req.params.id, status: 'AWAITING_ACTIVATION' });
-    if (!placement) return res.status(404).json({ error: 'NOT_FOUND' });
+    // durationDays never changes after creation, so reading it separately from the
+    // atomic status flip below is safe — it's the status transition itself that's racy
+    // against the topPlacementActivation cron, which can fire on the same document at
+    // the same moment. A plain findOne+save here would let both this route and the
+    // cron read status:'AWAITING_ACTIVATION' before either writes, double-firing the
+    // audit log and business update; the status:'AWAITING_ACTIVATION' filter on the
+    // update itself guarantees only one of them ever wins.
+    const existing = await TopPlacement.findOne({ _id: req.params.id, status: 'AWAITING_ACTIVATION' })
+      .select('durationDays')
+      .lean();
+    if (!existing) return res.status(404).json({ error: 'NOT_FOUND' });
 
     const confirmedAt = new Date();
-    const expiresAt = new Date(confirmedAt.getTime() + placement.durationDays * 24 * 60 * 60 * 1000);
+    const expiresAt = new Date(confirmedAt.getTime() + existing.durationDays * 24 * 60 * 60 * 1000);
 
-    placement.status = 'CONFIRMED';
-    placement.confirmedAt = confirmedAt;
-    placement.expiresAt = expiresAt;
-    await placement.save();
+    const placement = await TopPlacement.findOneAndUpdate(
+      { _id: req.params.id, status: 'AWAITING_ACTIVATION' },
+      { status: 'CONFIRMED', confirmedAt, expiresAt },
+      { new: true }
+    );
+    if (!placement) return res.status(409).json({ error: 'ALREADY_PROCESSED' });
 
     await Business.updateOne({ _id: placement.business }, { top: { active: true, until: expiresAt } });
     await logAdminAction(req, { action: 'topPlacement.confirm', targetType: 'TopPlacement', targetId: placement._id, meta: { business: placement.business } });
@@ -764,7 +803,7 @@ router.post(
       await sendMail({
         to: owner.email,
         subject: 'Новий рахунок — ZARAZ',
-        html: `Вам виставлено рахунок: ${trimmedDescription} — ${totalCommission}₴. Оплатіть протягом 7 днів у кабінеті бізнесу (розділ "Рахунки").`,
+        html: `Вам виставлено рахунок: ${escapeHtml(trimmedDescription)} — ${totalCommission}₴. Оплатіть протягом 7 днів у кабінеті бізнесу (розділ "Рахунки").`,
       });
     }
 

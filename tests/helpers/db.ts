@@ -78,6 +78,21 @@ export async function resetPersistentFixtureCounters(): Promise<void> {
       { name: { $in: ['МедЦентр Стрий', 'Стрижка+', 'Bellissima'] } },
       { $set: { unfairCancellations: 0, warnings: 0, catalogPenaltyUntil: null, underReview: false } }
     );
+
+  // Several tests (registration.spec.ts's "wrong password" / "repeated failed
+  // attempts" cases) deliberately send wrong-password logins against the
+  // persistent seed accounts to check error messages and rate limiting. Unlike
+  // TEST_-prefixed users, these accounts are never deleted between runs, so the
+  // backend's per-account lockout counter (failedLoginAttempts/loginLockedUntil)
+  // would otherwise accumulate across runs and eventually lock the account for
+  // real — breaking every later test that needs to log in as it. Reset it here
+  // for the same reason the business counters above get reset.
+  await db
+    .collection('users')
+    .updateMany(
+      { email: { $in: ['admin@zaraz.ua', 'medcenter@example.com'] } },
+      { $set: { failedLoginAttempts: 0 }, $unset: { loginLockedUntil: '' } }
+    );
 }
 
 /** Direct-write helper for state a UI flow can't reach in one step (e.g. backdating a booking). */

@@ -41,6 +41,12 @@ const userSchema = new mongoose.Schema(
     consecutiveViolations: { type: Number, default: 0 },
     underReview: { type: Boolean, default: false },
 
+    // Per-account lockout, independent of the IP-keyed login rate limiter — an
+    // attacker spraying wrong passwords for one specific account from many
+    // different IPs would otherwise never trip any per-IP limit at all.
+    failedLoginAttempts: { type: Number, default: 0 },
+    loginLockedUntil: Date,
+
     permissions: { type: [String], enum: PERMISSION_BUCKETS, default: undefined },
 
     business: { type: mongoose.Schema.Types.ObjectId, ref: 'Business' },

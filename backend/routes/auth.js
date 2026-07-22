@@ -9,6 +9,7 @@ const { customCategorySlug } = require('../utils/slugify');
 const { findDuplicateCategory } = require('../utils/categoryDedup');
 const { resolveCityForRegistration } = require('../utils/cityFromInput');
 const { sendMail } = require('../utils/mailer');
+const { escapeHtml } = require('../utils/escapeHtml');
 const {
   signAccessToken,
   signRefreshToken,
@@ -19,13 +20,19 @@ const {
   accessCookieOptions,
   refreshCookieOptions,
 } = require('../utils/tokens');
-const { loginLimiter, registerLimiter, verifyCodeLimiter } = require('../middleware/rateLimit');
+const { loginLimiter, refreshLimiter, registerLimiter, verifyCodeLimiter } = require('../middleware/rateLimit');
 const { requireAuth } = require('../middleware/auth');
 const { asyncHandler } = require('../utils/asyncHandler');
 
 const router = express.Router();
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Per-account lockout threshold/duration — deliberately looser than the IP-keyed
+// loginLimiter (5/15min) since this is the backstop for an attacker who spreads
+// attempts across many IPs specifically to stay under that limit.
+const FAILED_LOGIN_LOCK_THRESHOLD = 10;
+const FAILED_LOGIN_LOCK_MS = 15 * 60 * 1000;
 
 function isNonEmptyString(v) {
   return typeof v === 'string' && v.trim().length > 0;
@@ -92,7 +99,7 @@ router.post('/register/client', registerLimiter, asyncHandler(async (req, res) =
   await sendMail({
     to: user.email,
     subject: 'Код підтвердження — ZARAZ',
-    html: `Вітаємо, ${name}! Код підтвердження email: ${verificationCode}. Він дійсний 15 хвилин.`,
+    html: `Вітаємо, ${escapeHtml(name)}! Код підтвердження email: ${verificationCode}. Він дійсний 15 хвилин.`,
   });
 
   // Session is only issued once the code is confirmed via /verify-registration —
@@ -186,7 +193,7 @@ router.post('/register/business', registerLimiter, asyncHandler(async (req, res)
   await sendMail({
     to: user.email,
     subject: 'Код підтвердження — ZARAZ',
-    html: `Дякуємо за реєстрацію "${businessName}"! Код підтвердження email: ${verificationCode}. Він дійсний 15 хвилин. Профіль на розгляді у супер-адміна.`,
+    html: `Дякуємо за реєстрацію "${escapeHtml(businessName)}"! Код підтвердження email: ${verificationCode}. Він дійсний 15 хвилин. Профіль на розгляді у супер-адміна.`,
   });
 
   // Session is only issued once the code is confirmed via /verify-registration —
@@ -209,14 +216,34 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
   const user = await User.findOne({ email: email.toLowerCase() });
   if (!user) return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
 
+  if (user.loginLockedUntil && user.loginLockedUntil > new Date()) {
+    return res.status(423).json({ error: 'ACCOUNT_LOCKED', until: user.loginLockedUntil });
+  }
+
   const validPassword = await bcrypt.compare(password, user.passwordHash);
-  if (!validPassword) return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
+  if (!validPassword) {
+    user.failedLoginAttempts = (user.failedLoginAttempts || 0) + 1;
+    if (user.failedLoginAttempts >= FAILED_LOGIN_LOCK_THRESHOLD) {
+      user.loginLockedUntil = new Date(Date.now() + FAILED_LOGIN_LOCK_MS);
+      user.failedLoginAttempts = 0;
+    }
+    await user.save();
+    return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
+  }
+
+  // Correct password — clear any accumulated failure count/lock regardless of
+  // what happens next (unverified email, blocked account); issueSession() below
+  // persists this via its own user.save().
+  user.failedLoginAttempts = 0;
+  user.loginLockedUntil = undefined;
 
   if (!user.emailVerified) {
+    await user.save();
     return res.status(403).json({ error: 'EMAIL_NOT_VERIFIED', email: user.email });
   }
 
   if (user.blockedUntil && user.blockedUntil > new Date()) {
+    await user.save();
     return res.status(403).json({ error: 'ACCOUNT_BLOCKED', until: user.blockedUntil });
   }
 
@@ -233,7 +260,7 @@ router.post('/login', loginLimiter, asyncHandler(async (req, res) => {
 // forcing a real logout even though the session was perfectly valid seconds earlier.
 const REFRESH_GRACE_MS = 10 * 1000;
 
-router.post('/refresh', asyncHandler(async (req, res) => {
+router.post('/refresh', refreshLimiter, asyncHandler(async (req, res) => {
   const token = req.cookies?.refreshToken;
   if (!token) return res.status(401).json({ error: 'UNAUTHENTICATED' });
 

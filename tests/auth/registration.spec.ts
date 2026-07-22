@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { login, logout, registerClient, registerBusiness } from '../helpers/auth';
 import { uniqueTestEmail, TEST_USERS } from '../fixtures/users';
+import { updateDoc } from '../helpers/db';
 
 /**
  * Corrections vs. the original spec, verified against the running app:
@@ -26,7 +27,11 @@ test.describe('Client registration', () => {
     await registerClient(page, 'uk', { name: 'TEST_Client', email, phone: '+380991234567', password: 'TestClient123!' });
 
     await expect(page).toHaveURL(/\/uk\/?$/);
-    await expect(page.getByRole('button', { name: 'Вийти' })).toBeVisible();
+    // The public home page has no sidebar (logout lives in the client cabinet
+    // layout, not here — see client/layout.tsx) — the header's own name button
+    // (Header.tsx: {user.name.split(' ')[0]}, replacing the "Увійти" link) is
+    // what actually indicates a logged-in state on this page.
+    await expect(page.getByRole('button', { name: 'TEST_Client' })).toBeVisible();
   });
 
   test('rejects a duplicate email with a specific error, not a generic one', async ({ page }) => {
@@ -101,6 +106,25 @@ test.describe('Business registration', () => {
 });
 
 test.describe('Login', () => {
+  // This block runs once per Playwright project (chromium, then mobile) within
+  // the same overall run — the backend's per-account login-lockout counter
+  // (failedLoginAttempts/loginLockedUntil) persists across projects since it's
+  // the same shared businessOwner fixture and global-setup only resets it once,
+  // at the very start of the whole run. The "wrong password" and "repeated
+  // failed attempts" tests below deliberately push that counter close to its
+  // threshold; running the block a second time (mobile project) on top of
+  // whatever the first pass already accumulated could tip it over and lock the
+  // account for real, failing "valid credentials" for a reason that has
+  // nothing to do with what that test actually checks. Reset locally so each
+  // project's pass through this block always starts clean.
+  test.beforeAll(async () => {
+    await updateDoc(
+      'users',
+      { email: TEST_USERS.businessOwner.email },
+      { $set: { failedLoginAttempts: 0 }, $unset: { loginLockedUntil: '' } }
+    );
+  });
+
   test('valid credentials redirect to the role-appropriate home', async ({ page }) => {
     await login(page, 'uk', TEST_USERS.businessOwner.email, TEST_USERS.businessOwner.password);
     await expect(page).toHaveURL(/\/uk\/business-account\/dashboard/);
@@ -117,22 +141,37 @@ test.describe('Login', () => {
     expect(wrongPasswordError).toBe(wrongEmailError);
   });
 
-  test('repeated failed attempts eventually trigger the rate limiter', async ({ request }) => {
-    // loginLimiter is 5 requests / 15 min, keyed by IP — shared across every
-    // test in this run that hits /api/auth/login, not just this test's own
-    // attempts. Rather than assume an exact attempt count is still "fresh",
-    // hammer the endpoint and assert a 429 shows up somewhere in the stream.
-    let sawRateLimited = false;
-    for (let i = 0; i < 8; i++) {
+  test('repeated failed attempts eventually lock the account', async ({ request }) => {
+    // loginLimiter (IP-keyed) is deliberately skipped when NODE_ENV=test (see
+    // middleware/rateLimit.js) so the rest of this suite doesn't get IP-throttled
+    // by every other test's own login calls — so a 429 never appears here in
+    // test mode. The brute-force protection that IS still active in test mode is
+    // the per-account lockout (routes/auth.js: failedLoginAttempts/loginLockedUntil),
+    // keyed by account rather than IP. Use a disposable account (not the shared
+    // businessOwner fixture) so locking it for real doesn't affect any other test.
+    const email = uniqueTestEmail('lockout');
+    await request.post('http://localhost:4000/api/auth/register/client', {
+      data: {
+        name: 'TEST_Lockout',
+        email,
+        phone: '+380991234567',
+        password: 'RealPassword123!',
+        citySlug: 'stryi',
+        agreeToTerms: true,
+      },
+    });
+
+    let sawLocked = false;
+    for (let i = 0; i < 12; i++) {
       const res = await request.post('http://localhost:4000/api/auth/login', {
-        data: { email: TEST_USERS.businessOwner.email, password: 'WrongPassword1!' },
+        data: { email, password: 'WrongPassword1!' },
       });
-      if (res.status() === 429) {
-        sawRateLimited = true;
+      if (res.status() === 423) {
+        sawLocked = true;
         break;
       }
     }
-    expect(sawRateLimited).toBe(true);
+    expect(sawLocked).toBe(true);
   });
 });
 

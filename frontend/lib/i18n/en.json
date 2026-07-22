@@ -50,6 +50,7 @@
     "loginButton": "Sign in",
     "registerButton": "Create account",
     "invalidCredentials": "Wrong email or password",
+    "accountLocked": "Too many failed login attempts. The account is temporarily locked — try again in 15 minutes",
     "emailTaken": "This email is already registered",
     "weakPassword": "Password must be at least 8 characters",
     "genericError": "Something went wrong, please try again",

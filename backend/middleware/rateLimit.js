@@ -38,6 +38,20 @@ const loginLimiter = rateLimit({
   skip: skipInTest,
 });
 
+// Looser than login/register: legitimate traffic hits this often (every role-gated
+// layout mounting its own useMe()/useBusinessMe() on a full reload, multiple tabs),
+// per the grace-window comment in routes/auth.js — but it still needs a real cap
+// since a stolen/guessed refresh token being hammered is exactly what rotation is
+// meant to blunt.
+const refreshLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'TOO_MANY_ATTEMPTS' },
+  skip: skipInTest,
+});
+
 // Same window/limit as login — prevents automated account-creation spam and email flooding.
 const registerLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -95,6 +109,7 @@ module.exports = {
   publicLimiter,
   authedLimiter,
   loginLimiter,
+  refreshLimiter,
   registerLimiter,
   verifyCodeLimiter,
   bookingLimiter,
