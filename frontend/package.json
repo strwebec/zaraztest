@@ -16,7 +16,7 @@
     "next": "^16.2.11",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "react-i18next": "^15.1.4",
+    "react-i18next": "^17.0.10",
     "recharts": "^3.9.2",
     "xlsx": "^0.18.5",
     "zustand": "^5.0.2"
