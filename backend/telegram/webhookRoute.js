@@ -3,12 +3,17 @@ const { sendMessage } = require('./client');
 const { getPending, clearPending, resolveReply } = require('./confirmationStore');
 const { formatUnclearReply, formatExpired, formatCancelled } = require('./messageFormatting');
 const businessAgent = require('./agents/businessAgent');
+const financeAgent = require('./agents/financeAgent');
 
 // Every agent's executeConfirmed() lives behind this single dispatch table,
 // keyed by the `agent` field each agent stamps onto its own pending action
-// (see businessAgent.js's createPending call) — adding Finance/Security
-// agents later only means adding an entry here, not touching this function.
-const AGENTS = { business: businessAgent };
+// (see businessAgent.js's createPending call) — adding the Security agent
+// later only means adding an entry here, not touching this function.
+const AGENTS = { business: businessAgent, finance: financeAgent };
+// Tried in order until one recognizes the command — see each agent's own
+// handleCommand for its keyword set.
+const COMMAND_AGENTS = [businessAgent, financeAgent];
+const COMBINED_HELP = [businessAgent.HELP_TEXT, financeAgent.HELP_TEXT].join('\n\n');
 
 async function handleIncomingMessage(update) {
   const chatId = update.message?.chat?.id;
@@ -44,13 +49,16 @@ async function handleIncomingMessage(update) {
     return;
   }
 
-  let reply;
+  let reply = null;
   try {
-    reply = await businessAgent.handleCommand(chatId, text);
+    for (const agent of COMMAND_AGENTS) {
+      reply = await agent.handleCommand(chatId, text);
+      if (reply !== null) break;
+    }
   } catch (err) {
     reply = `Помилка: ${err.message}`;
   }
-  await sendMessage(chatId, reply ?? `Не розпізнав команду.\n\n${businessAgent.HELP_TEXT}`);
+  await sendMessage(chatId, reply ?? `Не розпізнав команду.\n\n${COMBINED_HELP}`);
 }
 
 // Three independent layers, checked in this order, before a single byte of the

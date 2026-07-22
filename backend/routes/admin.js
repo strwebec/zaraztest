@@ -1500,6 +1500,26 @@ router.delete(
   })
 );
 
+// Read-only, additive — built for the Telegram Finance Agent's "скільки заробили
+// сьогодні" question. Deliberately labeled grossCommission, not net profit: net
+// requires the month's manually-entered expenses (see platform-ledger below),
+// which simply don't exist yet for a day that hasn't closed out. Registered
+// BEFORE the /:month route below — Express matches routes in registration
+// order, and /:month would otherwise swallow "today-gross" as its param and
+// fail PLATFORM_MONTH_RE (learned this the hard way during Phase 4 testing).
+router.get(
+  '/platform-ledger/today-gross',
+  requirePermission('finance'),
+  asyncHandler(async (req, res) => {
+    const today = new Date().toISOString().slice(0, 10);
+    const agg = await Booking.aggregate([
+      { $match: { date: today, status: 'completed', commissionCharged: true } },
+      { $group: { _id: null, gross: { $sum: { $multiply: ['$price', { $ifNull: ['$commissionRate', 0] }] } } } },
+    ]);
+    res.json({ date: today, grossCommission: Math.round((agg[0]?.gross || 0) * 100) / 100 });
+  })
+);
+
 router.get(
   '/platform-ledger/:month',
   requirePermission('finance'),
@@ -1581,6 +1601,40 @@ router.get(
       months: monthsMetrics,
       totals: { ...totals, marginPercent },
       insights: buildPlatformPeriodInsights(monthsMetrics),
+    });
+  })
+);
+
+// Read-only, additive — built for the Telegram Finance Agent's "скільки заробили
+// з цього бізнесу за весь час" question. Gated on 'finance', deliberately not
+// mixed into the 'businesses' bucket that /businesses/:id uses, since this is
+// financial data a MODERATOR (has 'businesses' but not 'finance') shouldn't see.
+// Returns both accrued (every completed booking's commission, whether or not the
+// invoice was ever paid) and collected (sum of actually-PAID invoices) — these
+// genuinely diverge for a business with overdue invoices, so picking just one
+// would silently misrepresent the other.
+router.get(
+  '/businesses/:id/lifetime-commission',
+  requirePermission('finance'),
+  asyncHandler(async (req, res) => {
+    const business = await Business.findById(req.params.id).select('name').lean();
+    if (!business) return res.status(404).json({ error: 'NOT_FOUND' });
+
+    const [accruedAgg, collectedAgg] = await Promise.all([
+      Booking.aggregate([
+        { $match: { business: business._id, status: 'completed', commissionCharged: true } },
+        { $group: { _id: null, accrued: { $sum: { $multiply: ['$price', { $ifNull: ['$commissionRate', 0] }] } } } },
+      ]),
+      Invoice.aggregate([
+        { $match: { business: business._id, status: 'PAID' } },
+        { $group: { _id: null, collected: { $sum: '$totalCommission' } } },
+      ]),
+    ]);
+
+    res.json({
+      business: { id: business._id, name: business.name },
+      accruedCommission: Math.round((accruedAgg[0]?.accrued || 0) * 100) / 100,
+      collectedCommission: Math.round((collectedAgg[0]?.collected || 0) * 100) / 100,
     });
   })
 );
