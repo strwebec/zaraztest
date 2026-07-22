@@ -7,6 +7,7 @@ const cron = require('node-cron');
 
 const { connectDB } = require('./config/db');
 const { publicLimiter } = require('./middleware/rateLimit');
+const { requestLogger } = require('./middleware/requestLogger');
 const { runDailyRatingUpdate } = require('./jobs/dailyRatingUpdate');
 const { runMonthlyInvoices, isInvoiceGenerationDay } = require('./jobs/monthlyInvoices');
 const { runDailySweep } = require('./jobs/autoUnblock');
@@ -88,6 +89,7 @@ app.use(
 );
 app.use(express.json({ limit: '1mb' }));
 app.use(cookieParser());
+app.use(requestLogger);
 app.use(publicLimiter);
 app.use('/uploads', express.static(require('path').join(__dirname, 'uploads')));
 
