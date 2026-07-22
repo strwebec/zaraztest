@@ -15,6 +15,8 @@ const { sendDailyPaymentReminders } = require('./jobs/paymentReminders');
 const { runTopPlacementActivation } = require('./jobs/topPlacementActivation');
 const { runSheetsSync } = require('./jobs/sheetsSync');
 const { runAutoCompleteBookings } = require('./jobs/autoCompleteBookings');
+const { mountTelegramWebhook } = require('./telegram/webhookRoute');
+const { init: initTelegramServiceAuth } = require('./telegram/serviceAuth');
 
 const authRoutes = require('./routes/auth');
 const catalogRoutes = require('./routes/catalog');
@@ -103,6 +105,10 @@ app.use('/api/business', businessCrmRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/support', supportRoutes);
 
+// No-ops entirely (logs one notice, mounts nothing) until every TELEGRAM_*
+// env var below is set — see telegram/webhookRoute.js.
+mountTelegramWebhook(app);
+
 app.use((req, res) => res.status(404).json({ error: 'NOT_FOUND' }));
 
 app.use((err, _req, res, _next) => {
@@ -118,6 +124,10 @@ const port = process.env.PORT || 4000;
 connectDB()
   .then(() => {
     app.listen(port, () => console.log(`[server] listening on http://localhost:${port}`));
+
+    // No-ops entirely (logs one notice) until TELEGRAM_BOT_SERVICE_EMAIL/
+    // PASSWORD are set — see telegram/serviceAuth.js.
+    initTelegramServiceAuth().catch((err) => console.error('[telegram/serviceAuth] init failed', err));
 
     // Daily at 00:00: recompute catalog ranking scores, expire TOP placements, escalate overdue invoices.
     cron.schedule('0 0 * * *', () => {

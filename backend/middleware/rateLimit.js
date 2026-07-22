@@ -105,6 +105,18 @@ const adminLimiter = rateLimit({
   message: { error: 'TOO_MANY_ATTEMPTS' },
 });
 
+// The webhook path itself is already gated by a secret-token header + a
+// single-chat-id allowlist (see telegram/webhookRoute.js) — this is a last
+// line of defense against the endpoint being hammered, not the primary
+// protection. One Telegram chat sending normal messages never comes close.
+const telegramWebhookLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 60,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'TOO_MANY_ATTEMPTS' },
+});
+
 module.exports = {
   publicLimiter,
   authedLimiter,
@@ -116,4 +128,5 @@ module.exports = {
   reviewLimiter,
   catalogLimiter,
   adminLimiter,
+  telegramWebhookLimiter,
 };
