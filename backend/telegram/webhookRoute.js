@@ -4,16 +4,18 @@ const { getPending, clearPending, resolveReply } = require('./confirmationStore'
 const { formatUnclearReply, formatExpired, formatCancelled } = require('./messageFormatting');
 const businessAgent = require('./agents/businessAgent');
 const financeAgent = require('./agents/financeAgent');
+const securityAgent = require('./agents/securityAgent');
 
 // Every agent's executeConfirmed() lives behind this single dispatch table,
 // keyed by the `agent` field each agent stamps onto its own pending action
-// (see businessAgent.js's createPending call) — adding the Security agent
-// later only means adding an entry here, not touching this function.
+// (see businessAgent.js's createPending call). securityAgent has no entry
+// here — v1 is observation/alerting only, it never creates a pending action
+// (see .claude/plans/tidy-tickling-wilkinson.md's Phase 6-8 scoping).
 const AGENTS = { business: businessAgent, finance: financeAgent };
 // Tried in order until one recognizes the command — see each agent's own
 // handleCommand for its keyword set.
-const COMMAND_AGENTS = [businessAgent, financeAgent];
-const COMBINED_HELP = [businessAgent.HELP_TEXT, financeAgent.HELP_TEXT].join('\n\n');
+const COMMAND_AGENTS = [businessAgent, financeAgent, securityAgent];
+const COMBINED_HELP = [businessAgent.HELP_TEXT, financeAgent.HELP_TEXT, securityAgent.HELP_TEXT].join('\n\n');
 
 async function handleIncomingMessage(update) {
   const chatId = update.message?.chat?.id;

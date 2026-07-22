@@ -33,4 +33,22 @@ async function notifyPaymentReceipt(action, summary) {
   }
 }
 
-module.exports = { notifyPaymentReceipt };
+// Plain, no-confirmation-needed broadcast — for Security Agent v1 alerts
+// (Dependabot, sensitive AdminAuditLog entries), which are observe-and-alert
+// only in this version (no auto-fix/auto-deploy, see
+// .claude/plans/tidy-tickling-wilkinson.md). Same never-throws contract as
+// notifyPaymentReceipt above.
+async function notify(text) {
+  const chatId = process.env.TELEGRAM_AUTHORIZED_CHAT_ID;
+  if (!chatId || !process.env.TELEGRAM_BOT_TOKEN) {
+    console.log('[telegramNotifier] not configured — alert not sent:', text.split('\n')[0]);
+    return;
+  }
+  try {
+    await sendMessage(chatId, text);
+  } catch (err) {
+    console.error('[telegramNotifier] notify failed:', err.message);
+  }
+}
+
+module.exports = { notifyPaymentReceipt, notify };

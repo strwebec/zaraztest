@@ -17,6 +17,8 @@ const { runSheetsSync } = require('./jobs/sheetsSync');
 const { runAutoCompleteBookings } = require('./jobs/autoCompleteBookings');
 const { mountTelegramWebhook } = require('./telegram/webhookRoute');
 const { init: initTelegramServiceAuth } = require('./telegram/serviceAuth');
+const { runAuditLogWatch } = require('./jobs/auditLogWatch');
+const { runDependabotPoll } = require('./jobs/dependabotPoll');
 
 const authRoutes = require('./routes/auth');
 const catalogRoutes = require('./routes/catalog');
@@ -165,6 +167,17 @@ connectDB()
     // revenue/analytics/rating "live" instead of depending on someone clicking a button.
     cron.schedule('*/5 * * * *', () => {
       runAutoCompleteBookings().catch((err) => console.error('[cron] autoCompleteBookings failed', err));
+    });
+
+    // Every 2 minutes: alert on sensitive AdminAuditLog entries (Security Agent v1a).
+    cron.schedule('*/2 * * * *', () => {
+      runAuditLogWatch().catch((err) => console.error('[cron] auditLogWatch failed', err));
+    });
+
+    // Every 30 minutes: alert on new open Dependabot alerts (Security Agent v1a).
+    // No-ops silently if GITHUB_TOKEN/GITHUB_REPO aren't set.
+    cron.schedule('*/30 * * * *', () => {
+      runDependabotPoll().catch((err) => console.error('[cron] dependabotPoll failed', err));
     });
   })
   .catch((err) => {
