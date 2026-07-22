@@ -17,12 +17,16 @@ function createPending(chatId, action, summary) {
   return record;
 }
 
+// Returns null only when nothing was ever pending for this chat. A record
+// that existed but aged out still comes back (with `expired: true`) so the
+// caller can send an explicit "this request expired" reply instead of
+// silently falling through to command parsing as if nothing had happened.
 function getPending(chatId) {
   const record = pending.get(String(chatId));
   if (!record) return null;
   if (record.expiresAt < Date.now()) {
     pending.delete(String(chatId));
-    return null;
+    return { ...record, expired: true };
   }
   return record;
 }

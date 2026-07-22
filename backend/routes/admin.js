@@ -1024,6 +1024,25 @@ router.get(
   })
 );
 
+// Read-only, additive — built for the Telegram Business Agent's digest ("cities
+// with zero businesses"), which the plain /cities list above can't answer since
+// it never joins against Business. Deliberately a separate endpoint rather than
+// changing /cities' response shape, to avoid touching an already-audited route.
+router.get(
+  '/cities/business-counts',
+  requirePermission('categories'),
+  asyncHandler(async (req, res) => {
+    const [cities, counts] = await Promise.all([
+      City.find({ active: true }).collation({ locale: 'uk', strength: 1 }).sort({ name: 1 }).lean(),
+      Business.aggregate([{ $match: { status: 'ACTIVE' } }, { $group: { _id: '$city', count: { $sum: 1 } } }]),
+    ]);
+    const countByCity = new Map(counts.map((c) => [String(c._id), c.count]));
+    res.json({
+      cities: cities.map((c) => ({ _id: c._id, name: c.name, businessCount: countByCity.get(String(c._id)) || 0 })),
+    });
+  })
+);
+
 // Lets a super-admin add a city directly (already active, immediately searchable)
 // instead of only ever confirming ones created via a business/client registration.
 router.post(

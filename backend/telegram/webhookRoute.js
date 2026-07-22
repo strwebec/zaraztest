@@ -1,24 +1,56 @@
 const { telegramWebhookLimiter } = require('../middleware/rateLimit');
 const { sendMessage } = require('./client');
-const { callAdminApi } = require('./serviceAuth');
+const { getPending, clearPending, resolveReply } = require('./confirmationStore');
+const { formatUnclearReply, formatExpired, formatCancelled } = require('./messageFormatting');
+const businessAgent = require('./agents/businessAgent');
 
-// Phase 1 scope only: prove the webhook pipe end-to-end (echo + one read-only
-// admin figure). Agent command routing (Business/Finance/Security) is added in
-// later phases, on top of this same handler.
+// Every agent's executeConfirmed() lives behind this single dispatch table,
+// keyed by the `agent` field each agent stamps onto its own pending action
+// (see businessAgent.js's createPending call) — adding Finance/Security
+// agents later only means adding an entry here, not touching this function.
+const AGENTS = { business: businessAgent };
+
 async function handleIncomingMessage(update) {
   const chatId = update.message?.chat?.id;
   const text = update.message?.text;
   if (!chatId || !text) return;
 
-  let countsLine;
-  try {
-    const counts = await callAdminApi('GET', '/api/admin/pending-counts');
-    countsLine = `pending-counts: ${JSON.stringify(counts.body)}`;
-  } catch (err) {
-    countsLine = `(не вдалось отримати pending-counts: ${err.message})`;
+  const pending = getPending(chatId);
+  if (pending) {
+    if (pending.expired) {
+      await sendMessage(chatId, formatExpired());
+      return;
+    }
+    const verdict = resolveReply(text);
+    if (verdict === 'unclear') {
+      // Deliberately don't clear or fall through to command parsing — the
+      // pending action is still exactly what it was, we just didn't
+      // understand the reply to it.
+      await sendMessage(chatId, formatUnclearReply());
+      return;
+    }
+    clearPending(chatId);
+    if (verdict === 'cancel') {
+      await sendMessage(chatId, formatCancelled());
+      return;
+    }
+    let reply;
+    try {
+      reply = await AGENTS[pending.action.agent].executeConfirmed(pending.action);
+    } catch (err) {
+      reply = `Помилка виконання дії: ${err.message}`;
+    }
+    await sendMessage(chatId, reply);
+    return;
   }
 
-  await sendMessage(chatId, `echo: ${text}\n\n${countsLine}`);
+  let reply;
+  try {
+    reply = await businessAgent.handleCommand(chatId, text);
+  } catch (err) {
+    reply = `Помилка: ${err.message}`;
+  }
+  await sendMessage(chatId, reply ?? `Не розпізнав команду.\n\n${businessAgent.HELP_TEXT}`);
 }
 
 // Three independent layers, checked in this order, before a single byte of the
