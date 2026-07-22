@@ -19,6 +19,7 @@ const { mountTelegramWebhook } = require('./telegram/webhookRoute');
 const { init: initTelegramServiceAuth } = require('./telegram/serviceAuth');
 const { runAuditLogWatch } = require('./jobs/auditLogWatch');
 const { runDependabotPoll } = require('./jobs/dependabotPoll');
+const { runRenderLogAudit } = require('./jobs/renderLogAudit');
 
 const authRoutes = require('./routes/auth');
 const catalogRoutes = require('./routes/catalog');
@@ -178,6 +179,13 @@ connectDB()
     // No-ops silently if GITHUB_TOKEN/GITHUB_REPO aren't set.
     cron.schedule('*/30 * * * *', () => {
       runDependabotPoll().catch((err) => console.error('[cron] dependabotPoll failed', err));
+    });
+
+    // Every 10 minutes: rule-based checks over Render's own request logs
+    // (Security Agent v1b). No-ops silently if RENDER_API_KEY/RENDER_OWNER_ID/
+    // RENDER_SERVICE_ID aren't set.
+    cron.schedule('*/10 * * * *', () => {
+      runRenderLogAudit().catch((err) => console.error('[cron] renderLogAudit failed', err));
     });
   })
   .catch((err) => {
