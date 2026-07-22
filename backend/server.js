@@ -20,6 +20,7 @@ const { init: initTelegramServiceAuth } = require('./telegram/serviceAuth');
 const { runAuditLogWatch } = require('./jobs/auditLogWatch');
 const { runDependabotPoll } = require('./jobs/dependabotPoll');
 const { runRenderLogAudit } = require('./jobs/renderLogAudit');
+const { runWeeklyCodeAudit } = require('./jobs/weeklyCodeAudit');
 
 const authRoutes = require('./routes/auth');
 const catalogRoutes = require('./routes/catalog');
@@ -186,6 +187,13 @@ connectDB()
     // RENDER_SERVICE_ID aren't set.
     cron.schedule('*/10 * * * *', () => {
       runRenderLogAudit().catch((err) => console.error('[cron] renderLogAudit failed', err));
+    });
+
+    // Mondays at 08:00: bounded, advisory-only weekly code-diff audit
+    // (Security Agent v1c). No-ops silently if GITHUB_TOKEN/GITHUB_REPO/
+    // ANTHROPIC_API_KEY aren't set.
+    cron.schedule('0 8 * * 1', () => {
+      runWeeklyCodeAudit().catch((err) => console.error('[cron] weeklyCodeAudit failed', err));
     });
   })
   .catch((err) => {
